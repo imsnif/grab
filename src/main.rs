@@ -34,7 +34,7 @@ impl ZellijPlugin for State {
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
         ]);
-        subscribe(&[EventType::PaneUpdate, EventType::Key]);
+        subscribe(&[EventType::PaneUpdate, EventType::Key, EventType::PermissionRequestResult]);
 //         // Mock data loop - paste this into the load() function for testing
 //         // Comment out the subscribe() call when using this
 //         for i in 1..=50 {
@@ -56,14 +56,16 @@ impl ZellijPlugin for State {
 //             };
 //             self.pane_metadata.push(mock_pane);
 //         }
-        let own_plugin_id = get_plugin_ids().plugin_id;
-        rename_plugin_pane(own_plugin_id, "Editor panes");
         self.update_search_results();
     }
 
     fn update(&mut self, event: Event) -> bool {
         let mut should_render = false;
         match event {
+            Event::PermissionRequestResult(_) => {
+                let own_plugin_id = get_plugin_ids().plugin_id;
+                rename_plugin_pane(own_plugin_id, "Editor panes");
+            }
             Event::PaneUpdate(pane_manifest) => {
                 self.pane_metadata = extract_editor_pane_metadata(&pane_manifest);
                 self.adjust_selection_after_pane_update();
@@ -92,6 +94,14 @@ impl ZellijPlugin for State {
                         self.search_term.pop();
                         self.update_search_results();
                         should_render = true;
+                    }
+                    BareKey::Char('c') if key.has_modifiers(&[KeyModifier::Ctrl]) => {
+                        if self.search_term.is_empty() {
+                            close_self();
+                        } else {
+                            self.search_term.clear();
+                            should_render = true;
+                        }
                     }
                     _ => {}
                 }
@@ -338,11 +348,11 @@ impl State {
                 match pane.id {
                     PaneId::Terminal(terminal_id) => {
                         focus_terminal_pane(terminal_id, true);
-                        hide_self();
+                        close_self();
                     }
                     PaneId::Plugin(plugin_id) => {
                         focus_plugin_pane(plugin_id, true);
-                        hide_self();
+                        close_self();
                     }
                 }
             }
