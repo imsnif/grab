@@ -1660,7 +1660,6 @@ name = "picker"
 version = "0.1.0"
 dependencies = [
  "fuzzy-matcher",
- "syn 2.0.103",
  "zellij-tile",
 ]
 
