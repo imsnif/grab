@@ -26,26 +26,26 @@ impl UIRenderer {
         let search_text = Text::new(&truncated_search).color_all(3);
         let search_width = search_text.len();
 
-        if panes.is_empty() {
-            self.render_empty_state(rows, cols, search_text);
-            return;
-        }
-
-        let total_panes = panes.len();
-        let available_rows = rows.saturating_sub(6);
-        let max_visible_items = available_rows.min(total_panes);
-
         let (display_count, is_searching) = if search_term.is_empty() {
             (panes.len(), false)
         } else {
             (search_results.len(), true)
         };
-        let visible_items = available_rows.min(display_count);
 
-        if !search_term.is_empty() && search_results.is_empty() {
+        // Only show empty state if no panes AND not searching
+        if panes.is_empty() && !is_searching {
+            self.render_empty_state(rows, cols, search_text);
+            return;
+        }
+
+        // Show no results only when searching but found nothing
+        if is_searching && search_results.is_empty() {
             self.render_no_results(rows, cols, search_text);
             return;
         }
+
+        let available_rows = rows.saturating_sub(6);
+        let visible_items = available_rows.min(display_count);
 
         let has_scroll_up = scroll_offset > 0;
         let remaining_items = display_count.saturating_sub(scroll_offset + visible_items);
@@ -61,12 +61,7 @@ impl UIRenderer {
         let available_title_width = cols.saturating_sub(scroll_indication_space + type_column_width);
         let mut max_ui_width = search_width;
 
-        for pane in panes {
-            let truncated_title = truncate_middle(&pane.title, available_title_width);
-            let line_width = type_column_width + truncated_title.chars().count() + scroll_indication_space;
-            max_ui_width = max_ui_width.max(line_width);
-        }
-
+        // Calculate max width based on what we're actually displaying
         if is_searching {
             for result in search_results {
                 let display_text = result.display_text();
@@ -87,13 +82,20 @@ impl UIRenderer {
                 let line_width = type_column_width + more_files_text.chars().count() + scroll_indication_space;
                 max_ui_width = max_ui_width.max(line_width);
             }
+        } else {
+            // Only calculate pane widths if we have panes and not searching
+            for pane in panes {
+                let truncated_title = truncate_middle(&pane.title, available_title_width);
+                let line_width = type_column_width + truncated_title.chars().count() + scroll_indication_space;
+                max_ui_width = max_ui_width.max(line_width);
+            }
         }
 
         let ui_width = max_ui_width.min(cols);
         let ui_x = (cols.saturating_sub(ui_width)) / 2;
 
         let table_rows = 1;
-        let content_rows = if total_panes == 0 { 1 } else { max_visible_items };
+        let content_rows = if display_count == 0 { 1 } else { visible_items };
         let total_ui_height = 2 + table_rows + content_rows;
         let search_y = (rows.saturating_sub(total_ui_height)) / 2 + 1;
         let table_y = search_y + 1;
@@ -119,7 +121,7 @@ impl UIRenderer {
     }
 
     fn render_empty_state(&self, rows: usize, cols: usize, search_text: Text) {
-        let empty_text = Text::new("No editor panes found");
+        let empty_text = Text::new("No editor panes found - start typing to search files and definitions");
         let text_width = empty_text.content().chars().count();
         let search_term_width = search_text.content().chars().count();
         let ui_width = std::cmp::max(text_width, search_term_width);
@@ -179,7 +181,12 @@ impl UIRenderer {
                     item_type,
                 )
             } else {
-                (panes[item_index].title.clone(), None, "PANE")
+                // Only access panes if we're not searching and have panes
+                if let Some(pane) = panes.get(item_index) {
+                    (pane.title.clone(), None, "PANE")
+                } else {
+                    continue; // Skip if no pane at this index
+                }
             };
 
             let is_selected = selected_index == Some(item_index);

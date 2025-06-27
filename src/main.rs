@@ -179,7 +179,10 @@ impl State {
             self.search_state.results_count()
         };
 
-        self.ui_state.move_selection_down(items_count);
+        // Only allow selection if there are items to select
+        if items_count > 0 {
+            self.ui_state.move_selection_down(items_count);
+        }
     }
 
     fn move_selection_up(&mut self) {
@@ -189,17 +192,22 @@ impl State {
             self.search_state.results_count()
         };
 
-        self.ui_state.move_selection_up(items_count);
+        // Only allow selection if there are items to select
+        if items_count > 0 {
+            self.ui_state.move_selection_up(items_count);
+        }
     }
 
     fn focus_selected_item(&mut self) {
         if let Some(selected_index) = self.ui_state.selected_index {
             if self.search_state.is_empty() {
+                // Only try to focus panes if we have panes and are not searching
                 if let Some(pane) = self.app_state.get_panes().get(selected_index) {
                     let own_plugin_id = get_plugin_ids().plugin_id;
                     replace_pane_with_existing_pane(PaneId::Plugin(own_plugin_id), pane.id);
                 }
            } else {
+                // When searching, focus the selected search result
                 if let Some(search_result) = self.search_state.get_results().get(selected_index) {
                     match &search_result.item {
                         SearchItem::Pane(pane) => {
@@ -217,7 +225,6 @@ impl State {
                         SearchItem::RustAsset(rust_asset) => {
                             let should_close_plugin = true;
                             let mut file_to_open = FileToOpen::new(self.app_state.get_cwd().join(&rust_asset.file_path));
-                            eprintln!("line_number: {:?}", rust_asset.line_number);
                             file_to_open.line_number = Some(rust_asset.line_number);
                             open_file_in_place_of_plugin(
                                 file_to_open,
