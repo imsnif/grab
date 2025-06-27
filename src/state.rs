@@ -1,16 +1,5 @@
 use zellij_tile::prelude::*;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
-
-mod app_state;
-mod ui_state;
-mod search_state;
-mod search;
-mod ui;
-mod pane;
-mod files;
-
-register_plugin!(State);
 
 use crate::app_state::AppState;
 use crate::ui_state::UIState;
@@ -28,6 +17,7 @@ pub struct State {
     search_engine: SearchEngine,
     ui_renderer: UIRenderer,
     tabs: Vec<TabInfo>,
+    pending_pane_moves: Vec<PaneId>,
 }
 
 impl ZellijPlugin for State {
@@ -49,23 +39,31 @@ impl ZellijPlugin for State {
             if let Ok(files_and_rust_assets) = get_all_files("/host") {
                 let files: Vec<PathBuf> = files_and_rust_assets.keys().cloned().collect();
                 self.app_state.update_files(files);
-                self.app_state.update_rust_assets(files_and_rust_assets)
+                self.app_state.update_rust_assets(files_and_rust_assets);
             }
         }
+        println!("load");
         self.update_search_results();
     }
 
     fn update(&mut self, event: Event) -> bool {
+        eprintln!("update");
         let mut should_render = false;
         match event {
             Event::PermissionRequestResult(_) => {
                 let own_plugin_id = get_plugin_ids().plugin_id;
-                rename_plugin_pane(own_plugin_id, "Grab...");
+                rename_plugin_pane(own_plugin_id, "Focus or open...");
+                eprintln!("can");
+                eprintln!("has");
             }
             Event::TabUpdate(tab_info) => {
                 self.tabs = tab_info;
             }
             Event::PaneUpdate(pane_manifest) => {
+                eprintln!("checking pending pane moves");
+                self.check_pending_pane_moves(&pane_manifest);
+                eprintln!("done checking");
+                
                 let panes = extract_editor_pane_metadata(&pane_manifest);
                 self.app_state.update_panes(panes);
                 self.adjust_selection_after_pane_update();
@@ -192,38 +190,86 @@ impl State {
         self.ui_state.move_selection_up(items_count);
     }
 
+    fn get_picker_tab_index(&self) -> Option<usize> {
+        self.tabs.iter().find(|tab| tab.name == "picker 1").map(|tab| tab.position)
+    }
+
+    fn check_pending_pane_moves(&mut self, pane_manifest: &PaneManifest) {
+        if self.pending_pane_moves.is_empty() {
+            return;
+        }
+
+        let picker_tab_index = match self.get_picker_tab_index() {
+            Some(index) => index,
+            None => return,
+        };
+
+        let picker_tab_panes = match pane_manifest.panes.get(&picker_tab_index) {
+            Some(panes) => panes,
+            None => return,
+        };
+
+        let mut completed_moves = Vec::new();
+        
+        for (i, pending_pane_id) in self.pending_pane_moves.iter().enumerate() {
+            let pane_found_in_picker_tab = picker_tab_panes.iter().any(|pane_info| {
+                let pane_id = if pane_info.is_plugin {
+                    PaneId::Plugin(pane_info.id)
+                } else {
+                    PaneId::Terminal(pane_info.id)
+                };
+                pane_id == *pending_pane_id
+            });
+
+            if pane_found_in_picker_tab {
+                completed_moves.push(i);
+            }
+        }
+
+        for &index in completed_moves.iter().rev() {
+            self.pending_pane_moves.remove(index);
+        }
+
+        if !completed_moves.is_empty() && self.pending_pane_moves.is_empty() {
+            eprintln!("closing self");
+            close_self();
+        }
+    }
+
     fn focus_selected_item(&mut self) {
         if let Some(selected_index) = self.ui_state.selected_index {
             if self.search_state.is_empty() {
                 if let Some(pane) = self.app_state.get_panes().get(selected_index) {
-                    let own_plugin_id = get_plugin_ids().plugin_id;
-                    replace_pane_with_existing_pane(PaneId::Plugin(own_plugin_id), pane.id);
+                    if let Some(tab_index) = self.get_picker_tab_index() {
+                        self.pending_pane_moves.push(pane.id);
+                        break_panes_to_tab_with_index(&[pane.id], tab_index, true);
+                    }
                 }
-           } else {
+            } else {
                 if let Some(search_result) = self.search_state.get_results().get(selected_index) {
                     match &search_result.item {
                         SearchItem::Pane(pane) => {
-                            let own_plugin_id = get_plugin_ids().plugin_id;
-                            replace_pane_with_existing_pane(PaneId::Plugin(own_plugin_id), pane.id);
+                            if let Some(tab_index) = self.get_picker_tab_index() {
+                                self.pending_pane_moves.push(pane.id);
+                                eprintln!("breaking pane");
+                                break_panes_to_tab_with_index(&[pane.id], tab_index, true);
+                            }
                         },
                         SearchItem::File(file) => {
-                            let should_close_plugin = true;
-                            open_file_in_place_of_plugin(
+                            open_file(
                                 FileToOpen::new(self.app_state.get_cwd().join(file)),
-                                should_close_plugin,
                                 Default::default(),
                             );
+                            close_self();
                         },
                         SearchItem::RustAsset(rust_asset) => {
-                            let should_close_plugin = true;
                             let mut file_to_open = FileToOpen::new(self.app_state.get_cwd().join(&rust_asset.file_path));
-                            eprintln!("line_number: {:?}", rust_asset.line_number);
                             file_to_open.line_number = Some(rust_asset.line_number);
-                            open_file_in_place_of_plugin(
+                            open_file(
                                 file_to_open,
-                                should_close_plugin,
                                 Default::default(),
                             );
+                            close_self();
                         }
                     }
                 }
