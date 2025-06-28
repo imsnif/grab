@@ -19,12 +19,32 @@ impl UIRenderer {
         scroll_offset: usize,
         displayed_files: &[PathBuf],
         remaining_files: usize,
+        cwd: &PathBuf,
     ) {
         let search_display = format!("{}_", search_term);
         let max_search_width = cols.saturating_sub(4);
         let truncated_search = truncate_middle(&search_display, max_search_width);
         let search_text = Text::new(&truncated_search).color_all(3);
         let search_width = search_text.len();
+
+        // Create current directory display
+        let cwd_display = format!("Current Folder: {} (Ctrl f to change)", cwd.display());
+        let max_cwd_width = cols.saturating_sub(4);
+        let truncated_cwd = truncate_middle(&cwd_display, max_cwd_width);
+        
+        // Apply colors to different parts of the text
+        let folder_prefix = "Current Folder: ";
+        let ctrl_suffix = "Ctrl f";
+        
+        let mut cwd_text = Text::new(&truncated_cwd);
+        
+        // Color "Current Folder: " with color index 2
+        cwd_text = cwd_text.color_substring(2, folder_prefix);
+        
+        // Color "(Ctrl f to change)" with color index 3
+        cwd_text = cwd_text.color_substring(3, ctrl_suffix);
+        
+        let cwd_width = cwd_text.len();
 
         let (display_count, is_searching) = if search_term.is_empty() {
             (panes.len(), false)
@@ -34,17 +54,17 @@ impl UIRenderer {
 
         // Only show empty state if no panes AND not searching
         if panes.is_empty() && !is_searching {
-            self.render_empty_state(rows, cols, search_text);
+            self.render_empty_state(rows, cols, search_text, cwd_text);
             return;
         }
 
         // Show no results only when searching but found nothing
         if is_searching && search_results.is_empty() {
-            self.render_no_results(rows, cols, search_text);
+            self.render_no_results(rows, cols, search_text, cwd_text);
             return;
         }
 
-        let available_rows = rows.saturating_sub(6);
+        let available_rows = rows.saturating_sub(8); // Increased to account for cwd line
         let visible_items = available_rows.min(display_count);
 
         let has_scroll_up = scroll_offset > 0;
@@ -56,10 +76,10 @@ impl UIRenderer {
         } else {
             0
         };
-        let type_column_width = 7; // Increased to accommodate "STRUCT" and "ENUM"
+        let type_column_width = 7;
 
         let available_title_width = cols.saturating_sub(scroll_indication_space + type_column_width);
-        let mut max_ui_width = search_width;
+        let mut max_ui_width = search_width.max(cwd_width);
 
         // Calculate max width based on what we're actually displaying
         if is_searching {
@@ -96,10 +116,12 @@ impl UIRenderer {
 
         let table_rows = 1;
         let content_rows = if display_count == 0 { 1 } else { visible_items };
-        let total_ui_height = 2 + table_rows + content_rows;
-        let search_y = (rows.saturating_sub(total_ui_height)) / 2 + 1;
+        let total_ui_height = 3 + table_rows + content_rows; // Increased by 1 for cwd line
+        let cwd_y = (rows.saturating_sub(total_ui_height)) / 2 + 1;
+        let search_y = cwd_y + 1;
         let table_y = search_y + 1;
 
+        print_text_with_coordinates(cwd_text, ui_x, cwd_y, None, None);
         print_text_with_coordinates(search_text, ui_x, search_y, None, None);
 
         self.render_table(
@@ -120,22 +142,29 @@ impl UIRenderer {
         );
     }
 
-    fn render_empty_state(&self, rows: usize, cols: usize, search_text: Text) {
+    fn render_empty_state(&self, rows: usize, cols: usize, search_text: Text, cwd_text: Text) {
         let empty_text = Text::new("No editor panes found - start typing to search files and definitions");
         let text_width = empty_text.content().chars().count();
         let search_term_width = search_text.content().chars().count();
-        let ui_width = std::cmp::max(text_width, search_term_width);
+        let cwd_width = cwd_text.content().chars().count();
+        let ui_width = std::cmp::max(std::cmp::max(text_width, search_term_width), cwd_width);
         let x = (cols.saturating_sub(ui_width)) / 2;
         let y = rows / 2;
-        print_text_with_coordinates(search_text, x, y, None, None);
-        print_text_with_coordinates(empty_text, x, y + 2, None, None);
+        print_text_with_coordinates(cwd_text, x, y, None, None);
+        print_text_with_coordinates(search_text, x, y + 1, None, None);
+        print_text_with_coordinates(empty_text, x, y + 3, None, None);
     }
 
-    fn render_no_results(&self, rows: usize, cols: usize, search_text: Text) {
-        let ui_x = (cols.saturating_sub(search_text.len())) / 2;
-        let search_y = rows / 2;
+    fn render_no_results(&self, rows: usize, cols: usize, search_text: Text, cwd_text: Text) {
+        let cwd_width = cwd_text.content().chars().count();
+        let search_width = search_text.content().chars().count();
+        let ui_width = std::cmp::max(cwd_width, search_width);
+        let ui_x = (cols.saturating_sub(ui_width)) / 2;
+        let cwd_y = rows / 2;
+        let search_y = cwd_y + 1;
         let table_y = search_y + 1;
 
+        print_text_with_coordinates(cwd_text, ui_x, cwd_y, None, None);
         print_text_with_coordinates(search_text, ui_x, search_y, None, None);
 
         let mut table = Table::new().add_row(vec![" ", " ", " "]);

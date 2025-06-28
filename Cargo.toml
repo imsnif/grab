@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 zellij-tile = { version = "0.43.0", path = "/home/aram/code/zellij/zellij-tile" }
 fuzzy-matcher = "0.3.7"
+uuid = { version = "1.7.0", features = ["v4"] }
