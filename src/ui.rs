@@ -21,11 +21,13 @@ impl UIRenderer {
         remaining_files: usize,
         cwd: &PathBuf,
     ) {
+        let base_x = 1;
+        let base_y = 0;
+
         let search_display = format!("{}_", search_term);
         let max_search_width = cols.saturating_sub(4);
         let truncated_search = truncate_middle(&search_display, max_search_width);
         let search_text = Text::new(&truncated_search).color_all(3);
-        let search_width = search_text.len();
 
         // Create current directory display
         let cwd_display = format!("Current Folder: {} (Ctrl f to change)", cwd.display());
@@ -43,8 +45,6 @@ impl UIRenderer {
         
         // Color "(Ctrl f to change)" with color index 3
         cwd_text = cwd_text.color_substring(3, ctrl_suffix);
-        
-        let cwd_width = cwd_text.len();
 
         let (display_count, is_searching) = if search_term.is_empty() {
             (panes.len(), false)
@@ -54,13 +54,13 @@ impl UIRenderer {
 
         // Only show empty state if no panes AND not searching
         if panes.is_empty() && !is_searching {
-            self.render_empty_state(rows, cols, search_text, cwd_text);
+            self.render_empty_state(rows, cols, search_text, cwd_text, base_x, base_y);
             return;
         }
 
         // Show no results only when searching but found nothing
         if is_searching && search_results.is_empty() {
-            self.render_no_results(rows, cols, search_text, cwd_text);
+            self.render_no_results(rows, cols, search_text, cwd_text, base_x, base_y);
             return;
         }
 
@@ -79,54 +79,19 @@ impl UIRenderer {
         let type_column_width = 7;
 
         let available_title_width = cols.saturating_sub(scroll_indication_space + type_column_width);
-        let mut max_ui_width = search_width.max(cwd_width);
-
-        // Calculate max width based on what we're actually displaying
-        if is_searching {
-            for result in search_results {
-                let display_text = result.display_text();
-                let truncated_text = truncate_middle(&display_text, available_title_width);
-                let line_width = type_column_width + truncated_text.chars().count() + scroll_indication_space;
-                max_ui_width = max_ui_width.max(line_width);
-            }
-
-            for file in displayed_files {
-                let file_display = file.to_string_lossy();
-                let truncated_file = truncate_middle(&file_display, available_title_width);
-                let line_width = type_column_width + truncated_file.chars().count() + scroll_indication_space;
-                max_ui_width = max_ui_width.max(line_width);
-            }
-
-            if remaining_files > 0 {
-                let more_files_text = format!("+{} files", remaining_files);
-                let line_width = type_column_width + more_files_text.chars().count() + scroll_indication_space;
-                max_ui_width = max_ui_width.max(line_width);
-            }
-        } else {
-            // Only calculate pane widths if we have panes and not searching
-            for pane in panes {
-                let truncated_title = truncate_middle(&pane.title, available_title_width);
-                let line_width = type_column_width + truncated_title.chars().count() + scroll_indication_space;
-                max_ui_width = max_ui_width.max(line_width);
-            }
-        }
-
-        let ui_width = max_ui_width.min(cols);
-        let ui_x = (cols.saturating_sub(ui_width)) / 2;
 
         let table_rows = 1;
         let content_rows = if display_count == 0 { 1 } else { visible_items };
-        let total_ui_height = 3 + table_rows + content_rows; // Increased by 1 for cwd line
-        let cwd_y = (rows.saturating_sub(total_ui_height)) / 2 + 1;
+        let cwd_y = base_y + 1;
         let search_y = cwd_y + 1;
         let table_y = search_y + 1;
 
-        print_text_with_coordinates(cwd_text, ui_x, cwd_y, None, None);
-        print_text_with_coordinates(search_text, ui_x, search_y, None, None);
+        print_text_with_coordinates(cwd_text, base_x, cwd_y, None, None);
+        print_text_with_coordinates(search_text, base_x, search_y, None, None);
 
         self.render_table(
             table_y,
-            ui_x,
+            base_x,
             visible_items,
             display_count,
             scroll_offset,
@@ -142,41 +107,32 @@ impl UIRenderer {
         );
     }
 
-    fn render_empty_state(&self, rows: usize, cols: usize, search_text: Text, cwd_text: Text) {
+    fn render_empty_state(&self, rows: usize, cols: usize, search_text: Text, cwd_text: Text, base_x: usize, base_y: usize) {
         let empty_text = Text::new("No editor panes found - start typing to search files and definitions");
-        let text_width = empty_text.content().chars().count();
-        let search_term_width = search_text.content().chars().count();
-        let cwd_width = cwd_text.content().chars().count();
-        let ui_width = std::cmp::max(std::cmp::max(text_width, search_term_width), cwd_width);
-        let x = (cols.saturating_sub(ui_width)) / 2;
-        let y = rows / 2;
-        print_text_with_coordinates(cwd_text, x, y, None, None);
-        print_text_with_coordinates(search_text, x, y + 1, None, None);
-        print_text_with_coordinates(empty_text, x, y + 3, None, None);
+        let y = base_y;
+        print_text_with_coordinates(cwd_text, base_x, y, None, None);
+        print_text_with_coordinates(search_text, base_x, y + 1, None, None);
+        print_text_with_coordinates(empty_text, base_x, y + 3, None, None);
     }
 
-    fn render_no_results(&self, rows: usize, cols: usize, search_text: Text, cwd_text: Text) {
-        let cwd_width = cwd_text.content().chars().count();
-        let search_width = search_text.content().chars().count();
-        let ui_width = std::cmp::max(cwd_width, search_width);
-        let ui_x = (cols.saturating_sub(ui_width)) / 2;
-        let cwd_y = rows / 2;
+    fn render_no_results(&self, rows: usize, cols: usize, search_text: Text, cwd_text: Text, base_x: usize, base_y: usize) {
+        let cwd_y = base_y;
         let search_y = cwd_y + 1;
         let table_y = search_y + 1;
 
-        print_text_with_coordinates(cwd_text, ui_x, cwd_y, None, None);
-        print_text_with_coordinates(search_text, ui_x, search_y, None, None);
+        print_text_with_coordinates(cwd_text, base_x, cwd_y, None, None);
+        print_text_with_coordinates(search_text, base_x, search_y, None, None);
 
         let mut table = Table::new().add_row(vec![" ", " ", " "]);
         let empty_text = Text::new("No matching panes, files, or definitions found");
         table = table.add_styled_row(vec![Text::new(" "), empty_text, Text::new(" ")]);
-        print_table_with_coordinates(table, ui_x, table_y, None, None);
+        print_table_with_coordinates(table, base_x, table_y, None, None);
     }
 
     fn render_table(
         &self,
         table_y: usize,
-        ui_x: usize,
+        base_x: usize,
         visible_items: usize,
         display_count: usize,
         scroll_offset: usize,
@@ -274,7 +230,7 @@ impl UIRenderer {
             table = table.add_styled_row(vec![Text::new(" "), more_files_cell, Text::new(" ")]);
         }
 
-        print_table_with_coordinates(table, ui_x, table_y, None, None);
+        print_table_with_coordinates(table, base_x, table_y, None, None);
     }
 }
 
