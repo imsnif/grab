@@ -76,6 +76,20 @@ impl SearchEngine {
         }
     }
 
+    /// Check if the matched character indices form a contiguous sequence
+    fn is_contiguous_match(indices: &[usize]) -> bool {
+        if indices.len() <= 1 {
+            return true;
+        }
+
+        for i in 1..indices.len() {
+            if indices[i] != indices[i.saturating_sub(1)] + 1 {
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn search_panes_and_files(
         &self,
         search_term: &str,
@@ -89,21 +103,28 @@ impl SearchEngine {
 
         let mut matches = vec![];
 
-        // Search panes
+        // Search panes with contiguous match scoring
         for pane in panes {
             if let Some((score, indices)) = self.matcher.fuzzy_indices(&pane.title, search_term) {
-                matches.push(SearchResult::new_pane(pane.clone(), score, indices));
+                let boosted_score = if Self::is_contiguous_match(&indices) {
+                    // Apply 10x multiplier for contiguous matches to ensure they rank above scattered ones
+                    score.saturating_mul(10)
+                } else {
+                    score
+                };
+                
+                matches.push(SearchResult::new_pane(pane.clone(), boosted_score, indices));
             }
         }
 
-        // Search rust assets
+        // Search rust assets (no contiguous match boosting)
         for rust_asset in rust_assets {
             if let Some((score, indices)) = self.matcher.fuzzy_indices(&rust_asset.name, search_term) {
                 matches.push(SearchResult::new_rust_asset(rust_asset.clone(), score, indices));
             }
         }
 
-        // Search files (limited to top 3)
+        // Search files (limited to top 3, no contiguous match boosting)
         let mut file_matches = vec![];
         for file in files {
             let file_string = file.to_string_lossy();
