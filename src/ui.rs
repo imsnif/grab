@@ -104,6 +104,7 @@ impl UIRenderer {
             has_scroll_down,
             remaining_items,
             remaining_files,
+            cwd,
         );
     }
 
@@ -145,6 +146,7 @@ impl UIRenderer {
         has_scroll_down: bool,
         remaining_items: usize,
         remaining_files: usize,
+        current_cwd: &PathBuf,
     ) {
         let mut table = Table::new().add_row(vec![" ", " ", " "]);
 
@@ -170,8 +172,17 @@ impl UIRenderer {
                         }
                     }
                 };
+                
+                let display_text = match &search_result.item {
+                    SearchItem::ShellCommand { command, folders, .. } => {
+                        // Create display text with folder information
+                        self.format_shell_command_display(command, folders, current_cwd)
+                    },
+                    _ => search_result.display_text(),
+                };
+                
                 (
-                    search_result.display_text(),
+                    display_text,
                     Some(&search_result.indices),
                     item_type,
                 )
@@ -242,6 +253,62 @@ impl UIRenderer {
         }
 
         print_table_with_coordinates(table, base_x, table_y, None, None);
+    }
+
+    /// Format shell command display text with folder information
+    fn format_shell_command_display(&self, command: &str, folders: &[String], current_cwd: &PathBuf) -> String {
+        let current_cwd_str = current_cwd.to_string_lossy().to_string();
+        
+        if folders.is_empty() {
+            return command.to_string();
+        }
+        
+        // Check if current directory is in the folders list
+        let has_current_dir = folders.contains(&current_cwd_str);
+        
+        if folders.len() == 1 {
+            // Single folder case
+            let folder = &folders[0];
+            if folder == &current_cwd_str {
+                format!("{} (here)", command)
+            } else if folder == "unknown" {
+                command.to_string()
+            } else {
+                let folder_display = self.truncate_folder_path(folder);
+                format!("{} ({})", command, folder_display)
+            }
+        } else {
+            // Multiple folders case
+            if has_current_dir {
+                let other_count = folders.len().saturating_sub(1);
+                if other_count == 1 {
+                    format!("{} (here +1 other)", command)
+                } else {
+                    format!("{} (here +{} others)", command, other_count)
+                }
+            } else {
+                format!("{} ({} folders)", command, folders.len())
+            }
+        }
+    }
+
+    /// Truncate folder path for display (show last 2 components)
+    fn truncate_folder_path(&self, path: &str) -> String {
+        let path_buf = PathBuf::from(path);
+        let components: Vec<_> = path_buf.components().collect();
+        
+        if components.len() <= 2 {
+            path.to_string()
+        } else {
+            let last_two: Vec<String> = components
+                .iter()
+                .rev()
+                .take(2)
+                .rev()
+                .map(|c| c.as_os_str().to_string_lossy().to_string())
+                .collect();
+            format!(".../{}", last_two.join("/"))
+        }
     }
 }
 

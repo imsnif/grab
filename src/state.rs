@@ -141,6 +141,7 @@ impl ZellijPlugin for State {
             self.ui_state.scroll_offset,
             &displayed_files,
             remaining_files,
+            self.app_state.get_cwd(),
         );
     }
 }
@@ -159,6 +160,8 @@ impl State {
             self.app_state.get_panes(),
             self.app_state.get_files(),
             &rust_assets,
+            self.app_state.get_shell_histories(),
+            self.app_state.get_cwd(), // Pass current working directory
         );
 
         self.search_state.update_results(results);
@@ -267,6 +270,19 @@ impl State {
                             file_to_open.line_number = Some(rust_asset.line_number);
                             open_file(
                                 file_to_open,
+                                Default::default(),
+                            );
+                            close_self();
+                        },
+                        SearchItem::ShellCommand { command, shell, .. } => {
+                            // Execute the shell command in a new terminal pane
+                            let command_to_run = CommandToRun {
+                                path: PathBuf::from(shell),
+                                args: vec!["-ic".to_owned(), command.to_string()],
+                                cwd: Some(self.app_state.get_cwd().clone()),
+                            };
+                            open_command_pane(
+                                command_to_run,
                                 Default::default(),
                             );
                             close_self();

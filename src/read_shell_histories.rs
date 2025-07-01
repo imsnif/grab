@@ -11,7 +11,15 @@ pub struct HistoryEntry {
    pub exit_code: Option<i32>,
 }
 
-pub fn read_shell_histories() -> HashMap<String, Vec<HistoryEntry>> {
+#[derive(Debug, Clone)]
+pub struct DeduplicatedCommand {
+    pub command: String,
+    pub folders: Vec<String>, // All folders where this command was executed
+    pub latest_timestamp: Option<u64>, // Most recent execution timestamp
+    pub total_executions: usize, // Number of times this command was executed across all folders
+}
+
+pub fn read_shell_histories() -> HashMap<String, Vec<DeduplicatedCommand>> {
    let mut histories = HashMap::new();
    let home = "/host";
    
@@ -28,7 +36,10 @@ pub fn read_shell_histories() -> HashMap<String, Vec<HistoryEntry>> {
            match read_history_file(&hist_path, shell_name) {
                Ok(entries) => {
                    if !entries.is_empty() {
-                       histories.insert(shell_name.to_string(), entries);
+                       let deduplicated = deduplicate_commands(entries);
+                       if !deduplicated.is_empty() {
+                           histories.insert(shell_name.to_string(), deduplicated);
+                       }
                    }
                }
                Err(_) => continue,
@@ -37,6 +48,48 @@ pub fn read_shell_histories() -> HashMap<String, Vec<HistoryEntry>> {
    }
    
    histories
+}
+
+fn deduplicate_commands(entries: Vec<HistoryEntry>) -> Vec<DeduplicatedCommand> {
+    let mut command_map: HashMap<String, DeduplicatedCommand> = HashMap::new();
+    
+    for entry in entries {
+        let working_dir = entry.working_directory.unwrap_or_else(|| "unknown".to_string());
+        
+        match command_map.get_mut(&entry.command) {
+            Some(existing) => {
+                // Command already exists, update it
+                if !existing.folders.contains(&working_dir) {
+                    existing.folders.push(working_dir);
+                }
+                existing.total_executions = existing.total_executions.saturating_add(1);
+                
+                // Update latest timestamp if this entry is more recent
+                match (existing.latest_timestamp, entry.timestamp) {
+                    (Some(existing_ts), Some(entry_ts)) => {
+                        if entry_ts > existing_ts {
+                            existing.latest_timestamp = Some(entry_ts);
+                        }
+                    },
+                    (None, Some(entry_ts)) => {
+                        existing.latest_timestamp = Some(entry_ts);
+                    },
+                    _ => {} // Keep existing timestamp
+                }
+            },
+            None => {
+                // New command, create entry
+                command_map.insert(entry.command.clone(), DeduplicatedCommand {
+                    command: entry.command,
+                    folders: vec![working_dir],
+                    latest_timestamp: entry.timestamp,
+                    total_executions: 1,
+                });
+            }
+        }
+    }
+    
+    command_map.into_values().collect()
 }
 
 fn read_history_file(file_path: &str, shell_type: &str) -> Result<Vec<HistoryEntry>, std::io::Error> {

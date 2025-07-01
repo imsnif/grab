@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
-use crate::read_shell_histories::HistoryEntry;
+use crate::read_shell_histories::DeduplicatedCommand;
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
@@ -17,7 +17,7 @@ pub enum SearchItem {
     Pane(PaneMetadata),
     File(PathBuf),
     RustAsset(TypeDefinition),
-    ShellCommand { shell: String, command: String },
+    ShellCommand { shell: String, command: String, folders: Vec<String> },
 }
 
 impl SearchResult {
@@ -45,9 +45,9 @@ impl SearchResult {
         }
     }
 
-    pub fn new_shell_command(shell: String, command: String, score: i64, indices: Vec<usize>) -> Self {
+    pub fn new_shell_command(shell: String, command: String, folders: Vec<String>, score: i64, indices: Vec<usize>) -> Self {
         SearchResult {
-            item: SearchItem::ShellCommand { shell, command },
+            item: SearchItem::ShellCommand { shell, command, folders },
             score,
             indices,
         }
@@ -112,7 +112,7 @@ impl SearchEngine {
         panes: &[PaneMetadata],
         files: &[PathBuf],
         rust_assets: &[TypeDefinition],
-        shell_histories: &BTreeMap<String, Vec<HistoryEntry>>,
+        shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
         current_cwd: &PathBuf,
     ) -> Vec<SearchResult> {
         if search_term.is_empty() {
@@ -173,7 +173,7 @@ impl SearchEngine {
     fn search_shell_commands_prioritized(
         &self,
         search_term: &str,
-        shell_histories: &BTreeMap<String, Vec<HistoryEntry>>,
+        shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
         current_cwd: &PathBuf,
     ) -> Vec<SearchResult> {
         let mut current_dir_matches = Vec::new();
@@ -181,26 +181,24 @@ impl SearchEngine {
         
         let current_cwd_str = current_cwd.to_string_lossy().to_string();
 
-        for (shell_name, history_entries) in shell_histories {
-            for entry in history_entries {
-                if let Some((score, indices)) = self.matcher.fuzzy_indices(&entry.command, search_term) {
+        for (shell_name, deduplicated_commands) in shell_histories {
+            for cmd in deduplicated_commands {
+                if let Some((score, indices)) = self.matcher.fuzzy_indices(&cmd.command, search_term) {
                     let search_result = SearchResult::new_shell_command(
                         shell_name.clone(),
-                        entry.command.clone(),
+                        cmd.command.clone(),
+                        cmd.folders.clone(),
                         score,
                         indices,
                     );
 
                     // Check if command was executed in current directory
-                    let is_current_dir = match &entry.working_directory {
-                        Some(working_dir) => working_dir == &current_cwd_str,
-                        None => false,
-                    };
+                    let is_current_dir = cmd.folders.contains(&current_cwd_str);
 
                     if is_current_dir {
-                        current_dir_matches.push((search_result, entry.timestamp));
+                        current_dir_matches.push((search_result, cmd.latest_timestamp));
                     } else {
-                        other_dir_matches.push((search_result, entry.timestamp));
+                        other_dir_matches.push((search_result, cmd.latest_timestamp));
                     }
                 }
             }

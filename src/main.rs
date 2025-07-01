@@ -21,7 +21,7 @@ use crate::search::{SearchEngine, SearchItem};
 use crate::ui::UIRenderer;
 use crate::pane::extract_editor_pane_metadata;
 use crate::files::get_all_files;
-use crate::read_shell_histories::{HistoryEntry, read_shell_histories};
+use crate::read_shell_histories::{DeduplicatedCommand, read_shell_histories};
 
 #[derive(Default)]
 pub struct State {
@@ -296,7 +296,7 @@ impl State {
                                 Default::default(),
                             );
                         },
-                        SearchItem::ShellCommand { command, shell } => {
+                        SearchItem::ShellCommand { command, shell, .. } => {
                             // Execute the shell command in a new terminal pane
                             let should_close_plugin = true;
                             let command_to_run = CommandToRun {
@@ -330,7 +330,7 @@ impl State {
         eprintln!("reading shell histories...");
         let shell_histories = read_shell_histories();
         // Convert HashMap to BTreeMap for consistency
-        let btree_histories: BTreeMap<String, Vec<HistoryEntry>> = shell_histories.into_iter().collect();
+        let btree_histories: BTreeMap<String, Vec<DeduplicatedCommand>> = shell_histories.into_iter().collect();
         self.app_state.update_shell_histories(btree_histories);
         eprintln!("done");
     }
