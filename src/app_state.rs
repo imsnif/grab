@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use crate::pane::PaneMetadata;
 use crate::search::SearchResult;
 use crate::files::TypeDefinition;
+use crate::read_shell_histories::HistoryEntry;
 
 #[derive(Default)]
 pub struct AppState {
@@ -10,7 +11,7 @@ pub struct AppState {
     pub files: Vec<PathBuf>,
     pub rust_assets: BTreeMap<PathBuf, Vec<TypeDefinition>>,
     pub cwd: PathBuf,
-    pub shell_histories: BTreeMap<String, Vec<String>>, // <shell -> commands>
+    pub shell_histories: BTreeMap<String, Vec<HistoryEntry>>, // <shell -> history entries>
 }
 
 impl AppState {
@@ -30,7 +31,7 @@ impl AppState {
         self.rust_assets = rust_assets;
     }
 
-    pub fn update_shell_histories(&mut self, shell_histories: BTreeMap<String, Vec<String>>) {
+    pub fn update_shell_histories(&mut self, shell_histories: BTreeMap<String, Vec<HistoryEntry>>) {
         self.shell_histories = shell_histories;
     }
 
@@ -54,7 +55,7 @@ impl AppState {
         all_assets
     }
 
-    pub fn get_shell_histories(&self) -> &BTreeMap<String, Vec<String>> {
+    pub fn get_shell_histories(&self) -> &BTreeMap<String, Vec<HistoryEntry>> {
         &self.shell_histories
     }
 

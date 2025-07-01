@@ -1,9 +1,18 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-pub fn read_shell_histories() -> BTreeMap<String, Vec<String>> {
-   let mut histories = BTreeMap::new();
+#[derive(Debug, Clone)]
+pub struct HistoryEntry {
+   pub command: String,
+   pub timestamp: Option<u64>,
+   pub duration: Option<u64>,
+   pub working_directory: Option<String>,
+   pub exit_code: Option<i32>,
+}
+
+pub fn read_shell_histories() -> HashMap<String, Vec<HistoryEntry>> {
+   let mut histories = HashMap::new();
    let home = "/host";
    
    let shell_configs = [
@@ -17,9 +26,9 @@ pub fn read_shell_histories() -> BTreeMap<String, Vec<String>> {
    for (shell_name, hist_path) in shell_configs {
        if Path::new(&hist_path).exists() {
            match read_history_file(&hist_path, shell_name) {
-               Ok(commands) => {
-                   if !commands.is_empty() {
-                       histories.insert(shell_name.to_string(), commands);
+               Ok(entries) => {
+                   if !entries.is_empty() {
+                       histories.insert(shell_name.to_string(), entries);
                    }
                }
                Err(_) => continue,
@@ -30,7 +39,7 @@ pub fn read_shell_histories() -> BTreeMap<String, Vec<String>> {
    histories
 }
 
-fn read_history_file(file_path: &str, shell_type: &str) -> Result<Vec<String>, std::io::Error> {
+fn read_history_file(file_path: &str, shell_type: &str) -> Result<Vec<HistoryEntry>, std::io::Error> {
    let content = fs::read_to_string(file_path)?;
    
    match shell_type {
@@ -40,17 +49,60 @@ fn read_history_file(file_path: &str, shell_type: &str) -> Result<Vec<String>, s
    }
 }
 
-fn parse_basic_history(content: &str) -> Result<Vec<String>, std::io::Error> {
-   Ok(content
-       .lines()
-       .map(|line| line.trim())
-       .filter(|line| !line.is_empty())
-       .map(|line| line.to_string())
-       .collect())
+fn parse_basic_history(content: &str) -> Result<Vec<HistoryEntry>, std::io::Error> {
+   let lines: Vec<&str> = content.lines().collect();
+   let mut entries = Vec::new();
+   let mut i = 0;
+   
+   while i < lines.len() {
+       if let Some(line) = lines.get(i) {
+           let trimmed = line.trim();
+           if trimmed.is_empty() {
+               i = i.saturating_add(1);
+               continue;
+           }
+           
+           // Check if this is a timestamp line (bash with HISTTIMEFORMAT)
+           if trimmed.starts_with('#') {
+               if let Some(timestamp_str) = trimmed.get(1..) {
+                   if let Ok(timestamp) = timestamp_str.parse::<u64>() {
+                       // Next line should be the command
+                       i = i.saturating_add(1);
+                       if let Some(next_line) = lines.get(i) {
+                           let command = next_line.trim();
+                           if !command.is_empty() {
+                               entries.push(HistoryEntry {
+                                   command: command.to_string(),
+                                   timestamp: Some(timestamp),
+                                   duration: None,
+                                   working_directory: None,
+                                   exit_code: None,
+                               });
+                           }
+                       }
+                       i = i.saturating_add(1);
+                       continue;
+                   }
+               }
+           }
+           
+           // Regular command line
+           entries.push(HistoryEntry {
+               command: trimmed.to_string(),
+               timestamp: None,
+               duration: None,
+               working_directory: None,
+               exit_code: None,
+           });
+       }
+       i = i.saturating_add(1);
+   }
+   
+   Ok(entries)
 }
 
-fn parse_zsh_history(content: &str) -> Result<Vec<String>, std::io::Error> {
-   let mut commands = Vec::new();
+fn parse_zsh_history(content: &str) -> Result<Vec<HistoryEntry>, std::io::Error> {
+   let mut entries = Vec::new();
    
    for line in content.lines() {
        let trimmed = line.trim();
@@ -60,34 +112,106 @@ fn parse_zsh_history(content: &str) -> Result<Vec<String>, std::io::Error> {
        
        if trimmed.starts_with(": ") {
            if let Some(semicolon_pos) = trimmed.find(';') {
-               let command_start = semicolon_pos.saturating_add(1);
-               if let Some(command) = trimmed.get(command_start..) {
-                   if !command.is_empty() {
-                       commands.push(command.to_string());
+               // Parse ": timestamp:duration;command"
+               if let Some(timestamp_part) = trimmed.get(2..semicolon_pos) {
+                   let (timestamp, duration) = if let Some(colon_pos) = timestamp_part.find(':') {
+                       let timestamp = timestamp_part.get(..colon_pos)
+                           .and_then(|s| s.parse().ok());
+                       let duration = timestamp_part.get(colon_pos.saturating_add(1)..)
+                           .and_then(|s| s.parse().ok());
+                       (timestamp, duration)
+                   } else {
+                       // No duration, just timestamp
+                       (timestamp_part.parse().ok(), None)
+                   };
+                   
+                   if let Some(command) = trimmed.get(semicolon_pos.saturating_add(1)..) {
+                       if !command.is_empty() {
+                           entries.push(HistoryEntry {
+                               command: command.to_string(),
+                               timestamp,
+                               duration,
+                               working_directory: None,
+                               exit_code: None,
+                           });
+                       }
                    }
                }
            }
        } else {
-           commands.push(trimmed.to_string());
+           // Fallback for non-extended format
+           entries.push(HistoryEntry {
+               command: trimmed.to_string(),
+               timestamp: None,
+               duration: None,
+               working_directory: None,
+               exit_code: None,
+           });
        }
    }
    
-   Ok(commands)
+   Ok(entries)
 }
 
-fn parse_fish_history(content: &str) -> Result<Vec<String>, std::io::Error> {
-   let mut commands = Vec::new();
+fn parse_fish_history(content: &str) -> Result<Vec<HistoryEntry>, std::io::Error> {
+   let mut entries = Vec::new();
+   let lines: Vec<&str> = content.lines().collect();
+   let mut i = 0;
    
-   for line in content.lines() {
-       let trimmed = line.trim();
-       if trimmed.starts_with("- cmd: ") {
-           if let Some(command) = trimmed.get(7..) {
-               if !command.is_empty() {
-                   commands.push(command.to_string());
+   while i < lines.len() {
+       if let Some(line) = lines.get(i) {
+           let trimmed = line.trim();
+           
+           if trimmed.starts_with("- cmd: ") {
+               if let Some(command) = trimmed.get(7..) {
+                   if !command.is_empty() {
+                       let mut entry = HistoryEntry {
+                           command: command.to_string(),
+                           timestamp: None,
+                           duration: None,
+                           working_directory: None,
+                           exit_code: None,
+                       };
+                       
+                       // Look ahead for metadata
+                       let mut j = i.saturating_add(1);
+                       while j < lines.len() {
+                           if let Some(meta_line) = lines.get(j) {
+                               let meta_trimmed = meta_line.trim();
+                               
+                               if meta_trimmed.starts_with("when: ") {
+                                   if let Some(timestamp_str) = meta_trimmed.get(6..) {
+                                       entry.timestamp = timestamp_str.parse().ok();
+                                   }
+                               } else if meta_trimmed.starts_with("paths:") {
+                                   // Next line might have the path
+                                   if let Some(path_line) = lines.get(j.saturating_add(1)) {
+                                       let path_trimmed = path_line.trim();
+                                       if path_trimmed.starts_with("- ") {
+                                           if let Some(path) = path_trimmed.get(2..) {
+                                               entry.working_directory = Some(path.to_string());
+                                           }
+                                       }
+                                   }
+                               } else if meta_trimmed.starts_with("- cmd: ") || meta_trimmed.is_empty() {
+                                   // Hit next entry or empty line, stop looking for metadata
+                                   break;
+                               }
+                               
+                               j = j.saturating_add(1);
+                           } else {
+                               break;
+                           }
+                       }
+                       
+                       entries.push(entry);
+                       i = j.saturating_sub(1); // Will be incremented at end of loop
+                   }
                }
            }
        }
+       i = i.saturating_add(1);
    }
    
-   Ok(commands)
+   Ok(entries)
 }

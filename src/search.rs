@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
+use crate::read_shell_histories::HistoryEntry;
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
@@ -111,7 +112,8 @@ impl SearchEngine {
         panes: &[PaneMetadata],
         files: &[PathBuf],
         rust_assets: &[TypeDefinition],
-        shell_histories: &BTreeMap<String, Vec<String>>,
+        shell_histories: &BTreeMap<String, Vec<HistoryEntry>>,
+        current_cwd: &PathBuf,
     ) -> Vec<SearchResult> {
         if search_term.is_empty() {
             return vec![];
@@ -140,23 +142,12 @@ impl SearchEngine {
             }
         }
 
-        // Search shell history commands (limited to top 5)
-        let mut shell_matches = vec![];
-        for (shell_name, commands) in shell_histories {
-            for command in commands {
-                if let Some((score, indices)) = self.matcher.fuzzy_indices(command, search_term) {
-                    shell_matches.push(SearchResult::new_shell_command(
-                        shell_name.clone(),
-                        command.clone(),
-                        score,
-                        indices,
-                    ));
-                }
-            }
-        }
-
-        shell_matches.sort_by(|a, b| b.score.cmp(&a.score));
-        shell_matches.truncate(5);
+        // Search shell history commands with prioritization
+        let shell_matches = self.search_shell_commands_prioritized(
+            search_term,
+            shell_histories,
+            current_cwd,
+        );
 
         // Search files (limited to top 3, no contiguous match boosting)
         let mut file_matches = vec![];
@@ -176,6 +167,79 @@ impl SearchEngine {
         matches.sort_by(|a, b| b.score.cmp(&a.score));
 
         matches
+    }
+
+    /// Search shell commands with directory-based prioritization and recency sorting
+    fn search_shell_commands_prioritized(
+        &self,
+        search_term: &str,
+        shell_histories: &BTreeMap<String, Vec<HistoryEntry>>,
+        current_cwd: &PathBuf,
+    ) -> Vec<SearchResult> {
+        let mut current_dir_matches = Vec::new();
+        let mut other_dir_matches = Vec::new();
+        
+        let current_cwd_str = current_cwd.to_string_lossy().to_string();
+
+        for (shell_name, history_entries) in shell_histories {
+            for entry in history_entries {
+                if let Some((score, indices)) = self.matcher.fuzzy_indices(&entry.command, search_term) {
+                    let search_result = SearchResult::new_shell_command(
+                        shell_name.clone(),
+                        entry.command.clone(),
+                        score,
+                        indices,
+                    );
+
+                    // Check if command was executed in current directory
+                    let is_current_dir = match &entry.working_directory {
+                        Some(working_dir) => working_dir == &current_cwd_str,
+                        None => false,
+                    };
+
+                    if is_current_dir {
+                        current_dir_matches.push((search_result, entry.timestamp));
+                    } else {
+                        other_dir_matches.push((search_result, entry.timestamp));
+                    }
+                }
+            }
+        }
+
+        // Sort each group by score (descending), then by timestamp (most recent first)
+        Self::sort_shell_matches_by_score_and_recency(&mut current_dir_matches);
+        Self::sort_shell_matches_by_score_and_recency(&mut other_dir_matches);
+
+        // Combine results: current directory first, then others
+        let mut final_matches = Vec::new();
+        final_matches.extend(current_dir_matches.into_iter().map(|(result, _)| result));
+        final_matches.extend(other_dir_matches.into_iter().map(|(result, _)| result));
+
+        // Apply the 5-command limit after prioritization
+        final_matches.truncate(5);
+
+        final_matches
+    }
+
+    /// Sort shell command matches by score (descending), then by recency (most recent first)
+    fn sort_shell_matches_by_score_and_recency(
+        matches: &mut Vec<(SearchResult, Option<u64>)>,
+    ) {
+        matches.sort_by(|a, b| {
+            // First, sort by score (descending)
+            let score_cmp = b.0.score.cmp(&a.0.score);
+            if score_cmp != std::cmp::Ordering::Equal {
+                return score_cmp;
+            }
+
+            // If scores are equal, sort by timestamp (most recent first)
+            match (&b.1, &a.1) {
+                (Some(timestamp_b), Some(timestamp_a)) => timestamp_b.cmp(timestamp_a),
+                (Some(_), None) => std::cmp::Ordering::Less, // Commands with timestamp come first
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal, // Both have no timestamp
+            }
+        });
     }
 
     pub fn get_displayed_files(&self, search_term: &str, files: &[PathBuf]) -> (Vec<PathBuf>, usize) {

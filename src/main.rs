@@ -21,7 +21,7 @@ use crate::search::{SearchEngine, SearchItem};
 use crate::ui::UIRenderer;
 use crate::pane::extract_editor_pane_metadata;
 use crate::files::get_all_files;
-use crate::read_shell_histories::read_shell_histories;
+use crate::read_shell_histories::{HistoryEntry, read_shell_histories};
 
 #[derive(Default)]
 pub struct State {
@@ -33,7 +33,6 @@ pub struct State {
     tabs: Vec<TabInfo>,
     request_ids: Vec<String>,
     initial_cwd: Option<PathBuf>,
-    shell_histories: BTreeMap<String, Vec<String>>, // <shell -> commands>
 }
 
 impl ZellijPlugin for State {
@@ -224,7 +223,8 @@ impl State {
             self.app_state.get_panes(),
             self.app_state.get_files(),
             &rust_assets,
-            &self.shell_histories,
+            self.app_state.get_shell_histories(),
+            self.app_state.get_cwd(), // Pass current working directory
         );
 
         self.search_state.update_results(results);
@@ -328,9 +328,13 @@ impl State {
 
     fn populate_shell_histories(&mut self) {
         eprintln!("reading shell histories...");
-        self.shell_histories = read_shell_histories();
+        let shell_histories = read_shell_histories();
+        // Convert HashMap to BTreeMap for consistency
+        let btree_histories: BTreeMap<String, Vec<HistoryEntry>> = shell_histories.into_iter().collect();
+        self.app_state.update_shell_histories(btree_histories);
         eprintln!("done");
     }
+
     fn update_host_folder(&mut self, new_host_folder: Option<PathBuf>, force_update: bool) {
         let new_host_folder = new_host_folder.unwrap_or_else(|| get_plugin_ids().initial_cwd);
         self.app_state.set_cwd(new_host_folder);
