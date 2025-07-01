@@ -10,6 +10,7 @@ pub struct AppState {
     pub files: Vec<PathBuf>,
     pub rust_assets: BTreeMap<PathBuf, Vec<TypeDefinition>>,
     pub cwd: PathBuf,
+    pub shell_histories: BTreeMap<String, Vec<String>>, // <shell -> commands>
 }
 
 impl AppState {
@@ -27,6 +28,10 @@ impl AppState {
 
     pub fn update_rust_assets(&mut self, rust_assets: BTreeMap<PathBuf, Vec<TypeDefinition>>) {
         self.rust_assets = rust_assets;
+    }
+
+    pub fn update_shell_histories(&mut self, shell_histories: BTreeMap<String, Vec<String>>) {
+        self.shell_histories = shell_histories;
     }
 
     pub fn set_cwd(&mut self, cwd: PathBuf) {
@@ -47,6 +52,10 @@ impl AppState {
             all_assets.extend(definitions.clone());
         }
         all_assets
+    }
+
+    pub fn get_shell_histories(&self) -> &BTreeMap<String, Vec<String>> {
+        &self.shell_histories
     }
 
     pub fn get_cwd(&self) -> &PathBuf {

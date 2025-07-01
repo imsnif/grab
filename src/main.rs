@@ -10,6 +10,7 @@ mod search;
 mod ui;
 mod pane;
 mod files;
+mod read_shell_histories;
 
 register_plugin!(State);
 
@@ -20,6 +21,7 @@ use crate::search::{SearchEngine, SearchItem};
 use crate::ui::UIRenderer;
 use crate::pane::extract_editor_pane_metadata;
 use crate::files::get_all_files;
+use crate::read_shell_histories::read_shell_histories;
 
 #[derive(Default)]
 pub struct State {
@@ -30,16 +32,20 @@ pub struct State {
     ui_renderer: UIRenderer,
     tabs: Vec<TabInfo>,
     request_ids: Vec<String>,
+    initial_cwd: Option<PathBuf>,
+    shell_histories: BTreeMap<String, Vec<String>>, // <shell -> commands>
 }
 
 impl ZellijPlugin for State {
     fn load(&mut self, _configuration: BTreeMap<String, String>) {
+        eprintln!("load");
         request_permission(&[
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
             PermissionType::OpenFiles,
             PermissionType::FullHdAccess,
             PermissionType::MessageAndLaunchOtherPlugins,
+            PermissionType::RunCommands,
         ]);
         subscribe(&[
             EventType::PaneUpdate,
@@ -49,6 +55,7 @@ impl ZellijPlugin for State {
             EventType::HostFolderChanged,
         ]);
 
+        self.initial_cwd = Some(get_plugin_ids().initial_cwd);
         self.update_host_folder(None, false);
     }
 
@@ -56,8 +63,11 @@ impl ZellijPlugin for State {
         let mut should_render = false;
         match event {
             Event::PermissionRequestResult(_) => {
+                eprintln!("PermissionRequestResult");
                 let own_plugin_id = get_plugin_ids().plugin_id;
                 rename_plugin_pane(own_plugin_id, "Grab...");
+                eprintln!("changing host folder");
+                change_host_folder(PathBuf::from("/home/aram")); // TODO: get $HOME from Zellij
             }
             Event::TabUpdate(tab_info) => {
                 self.tabs = tab_info;
@@ -71,7 +81,15 @@ impl ZellijPlugin for State {
             }
             Event::HostFolderChanged(new_host_folder) => {
                 eprintln!("HostFolderChanged");
-                self.update_host_folder(Some(new_host_folder), true);
+                if let Some(initial_cwd) = self.initial_cwd.take() {
+                    // we just changed to the host folder
+                    self.populate_shell_histories();
+                    change_host_folder(initial_cwd);
+                } else {
+                    // we already populated the shell history, this is just a normal change
+                    self.update_host_folder(Some(new_host_folder), true);
+                }
+                should_render = true;
             }
             Event::Key(key) => match key.bare_key {
                 BareKey::Down if key.has_no_modifiers() => {
@@ -206,6 +224,7 @@ impl State {
             self.app_state.get_panes(),
             self.app_state.get_files(),
             &rust_assets,
+            &self.shell_histories,
         );
 
         self.search_state.update_results(results);
@@ -276,6 +295,20 @@ impl State {
                                 should_close_plugin,
                                 Default::default(),
                             );
+                        },
+                        SearchItem::ShellCommand { command, shell } => {
+                            // Execute the shell command in a new terminal pane
+                            let should_close_plugin = true;
+                            let command_to_run = CommandToRun {
+                                path: PathBuf::from(shell),
+                                args: vec!["-ic".to_owned(), command.to_string() ],
+                                cwd: Some(self.app_state.get_cwd().clone()),
+                            };
+                            open_command_pane_in_place_of_plugin(
+                                command_to_run,
+                                should_close_plugin,
+                                Default::default(),
+                            );
                         }
                     }
                 }
@@ -293,6 +326,11 @@ impl State {
         self.ui_state.adjust_selection_after_update(items_count);
     }
 
+    fn populate_shell_histories(&mut self) {
+        eprintln!("reading shell histories...");
+        self.shell_histories = read_shell_histories();
+        eprintln!("done");
+    }
     fn update_host_folder(&mut self, new_host_folder: Option<PathBuf>, force_update: bool) {
         let new_host_folder = new_host_folder.unwrap_or_else(|| get_plugin_ids().initial_cwd);
         self.app_state.set_cwd(new_host_folder);

@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::collections::BTreeMap;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
@@ -15,6 +16,7 @@ pub enum SearchItem {
     Pane(PaneMetadata),
     File(PathBuf),
     RustAsset(TypeDefinition),
+    ShellCommand { shell: String, command: String },
 }
 
 impl SearchResult {
@@ -42,6 +44,14 @@ impl SearchResult {
         }
     }
 
+    pub fn new_shell_command(shell: String, command: String, score: i64, indices: Vec<usize>) -> Self {
+        SearchResult {
+            item: SearchItem::ShellCommand { shell, command },
+            score,
+            indices,
+        }
+    }
+
     pub fn display_text(&self) -> String {
         match &self.item {
             SearchItem::Pane(pane) => pane.title.clone(),
@@ -49,6 +59,7 @@ impl SearchResult {
             SearchItem::RustAsset(rust_asset) => {
                 format!("{} ({})", rust_asset.name, rust_asset.file_path.to_string_lossy())
             }
+            SearchItem::ShellCommand { command, .. } => command.clone(),
         }
     }
 
@@ -62,6 +73,10 @@ impl SearchResult {
 
     pub fn is_rust_asset(&self) -> bool {
         matches!(self.item, SearchItem::RustAsset(_))
+    }
+
+    pub fn is_shell_command(&self) -> bool {
+        matches!(self.item, SearchItem::ShellCommand { .. })
     }
 }
 
@@ -96,6 +111,7 @@ impl SearchEngine {
         panes: &[PaneMetadata],
         files: &[PathBuf],
         rust_assets: &[TypeDefinition],
+        shell_histories: &BTreeMap<String, Vec<String>>,
     ) -> Vec<SearchResult> {
         if search_term.is_empty() {
             return vec![];
@@ -124,6 +140,24 @@ impl SearchEngine {
             }
         }
 
+        // Search shell history commands (limited to top 5)
+        let mut shell_matches = vec![];
+        for (shell_name, commands) in shell_histories {
+            for command in commands {
+                if let Some((score, indices)) = self.matcher.fuzzy_indices(command, search_term) {
+                    shell_matches.push(SearchResult::new_shell_command(
+                        shell_name.clone(),
+                        command.clone(),
+                        score,
+                        indices,
+                    ));
+                }
+            }
+        }
+
+        shell_matches.sort_by(|a, b| b.score.cmp(&a.score));
+        shell_matches.truncate(5);
+
         // Search files (limited to top 3, no contiguous match boosting)
         let mut file_matches = vec![];
         for file in files {
@@ -137,6 +171,7 @@ impl SearchEngine {
         file_matches.sort_by(|a, b| b.score.cmp(&a.score));
         file_matches.truncate(3);
 
+        matches.extend(shell_matches);
         matches.extend(file_matches);
         matches.sort_by(|a, b| b.score.cmp(&a.score));
 

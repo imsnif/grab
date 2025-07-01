@@ -108,7 +108,7 @@ impl UIRenderer {
     }
 
     fn render_empty_state(&self, rows: usize, cols: usize, search_text: Text, cwd_text: Text, base_x: usize, base_y: usize) {
-        let empty_text = Text::new("No editor panes found - start typing to search files and definitions");
+        let empty_text = Text::new("No editor panes found - start typing to search files, definitions, and shell history");
         let y = base_y;
         print_text_with_coordinates(cwd_text, base_x, y, None, None);
         print_text_with_coordinates(search_text, base_x, y + 1, None, None);
@@ -124,7 +124,7 @@ impl UIRenderer {
         print_text_with_coordinates(search_text, base_x, search_y, None, None);
 
         let mut table = Table::new().add_row(vec![" ", " ", " "]);
-        let empty_text = Text::new("No matching panes, files, or definitions found");
+        let empty_text = Text::new("No matching panes, files, definitions, or shell commands found");
         table = table.add_styled_row(vec![Text::new(" "), empty_text, Text::new(" ")]);
         print_table_with_coordinates(table, base_x, table_y, None, None);
     }
@@ -158,6 +158,16 @@ impl UIRenderer {
                     SearchItem::RustAsset(rust_asset) => match rust_asset.type_kind {
                         TypeKind::Struct => "STRUCT",
                         TypeKind::Enum => "ENUM",
+                    },
+                    SearchItem::ShellCommand { shell, .. } => {
+                        match shell.to_uppercase().as_str() {
+                            "BASH" => "BASH",
+                            "ZSH" => "ZSH", 
+                            "FISH" => "FISH",
+                            "SH" => "SH",
+                            "KSH" => "KSH",
+                            _ => "SHELL",
+                        }
                     }
                 };
                 (
@@ -188,6 +198,7 @@ impl UIRenderer {
                 "PANE" => 0,
                 "FILE" => 1,
                 "STRUCT" | "ENUM" => 2,
+                "BASH" | "ZSH" | "FISH" | "SH" | "KSH" | "SHELL" => 4,
                 _ => 0,
             };
             type_cell = type_cell.color_all(color_index);
