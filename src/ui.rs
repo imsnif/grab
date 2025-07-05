@@ -261,7 +261,7 @@ impl UIRenderer {
                     }
                 }
 
-                // Show scroll indicators in the third column
+                // Show scroll indicators or shortcut in the third column
                 let third_column = if item_index == global_start && scroll_offset > 0 {
                     let indicator_text = format!("↑ {} more", scroll_offset);
                     Text::new(&indicator_text).color_all(1)
@@ -270,6 +270,9 @@ impl UIRenderer {
                     let remaining = total_items.saturating_sub(scroll_offset + visible_rows);
                     let indicator_text = format!("↓ {} more", remaining);
                     Text::new(&indicator_text).color_all(1)
+                } else if is_selected {
+                    let shortcut = if is_shell_commands { " <Enter>" } else { " <Tab>" };
+                    Text::new(shortcut).color_all(3)
                 } else {
                     Text::new(" ")
                 };

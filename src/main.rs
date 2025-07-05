@@ -97,10 +97,10 @@ impl ZellijPlugin for State {
                     self.move_selection_up();
                     should_render = true;
                 }
-                BareKey::Enter if key.has_no_modifiers() => {
+                BareKey::Tab if key.has_no_modifiers() => {
                     self.focus_selected_item_table1();
                 }
-                BareKey::Tab if key.has_no_modifiers() => {
+                BareKey::Enter if key.has_no_modifiers() => {
                     self.focus_selected_item_table2();
                 }
                 BareKey::Char(character) if key.has_no_modifiers() => {
@@ -297,8 +297,9 @@ impl State {
                     args: vec!["-ic".to_owned(), command.to_string() ],
                     cwd: Some(self.app_state.get_cwd().clone()),
                 };
-                open_command_pane(
+                open_command_pane_in_place_of_plugin(
                     command_to_run,
+                    should_close_plugin,
                     Default::default(),
                 );
             }
