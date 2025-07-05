@@ -160,11 +160,8 @@ impl SearchEngine {
             results.push(SearchResult::new_rust_asset(rust_asset.clone(), 500, vec![]));
         }
 
-        // Add limited files (top 50)
-        for (i, file) in files.iter().enumerate() {
-            if i >= 50 {
-                break;
-            }
+        // Add all files
+        for file in files {
             results.push(SearchResult::new_file(file.clone(), 100, vec![]));
         }
 
@@ -227,20 +224,15 @@ impl SearchEngine {
             }
         }
 
-        // Search files (limited to top 3)
-        let mut file_matches = vec![];
+        // Search all files
         for file in files {
             let file_string = file.to_string_lossy();
 
             if let Some((score, indices)) = self.matcher.fuzzy_indices(&file_string, search_term) {
-                file_matches.push(SearchResult::new_file(file.clone(), score, indices));
+                matches.push(SearchResult::new_file(file.clone(), score, indices));
             }
         }
 
-        file_matches.sort_by(|a, b| b.score.cmp(&a.score));
-        file_matches.truncate(3);
-
-        matches.extend(file_matches);
         matches.sort_by(|a, b| b.score.cmp(&a.score));
 
         matches
