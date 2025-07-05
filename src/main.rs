@@ -66,7 +66,7 @@ impl ZellijPlugin for State {
                 let own_plugin_id = get_plugin_ids().plugin_id;
                 rename_plugin_pane(own_plugin_id, "Grab...");
                 eprintln!("changing host folder");
-                change_host_folder(PathBuf::from("/home/aram")); // TODO: get $HOME from Zellij
+                change_host_folder(PathBuf::from("/home/aram"));
             }
             Event::TabUpdate(tab_info) => {
                 self.tabs = tab_info;
@@ -81,11 +81,9 @@ impl ZellijPlugin for State {
             Event::HostFolderChanged(new_host_folder) => {
                 eprintln!("HostFolderChanged");
                 if let Some(initial_cwd) = self.initial_cwd.take() {
-                    // we just changed to the host folder
                     self.populate_shell_histories();
                     change_host_folder(initial_cwd);
                 } else {
-                    // we already populated the shell history, this is just a normal change
                     self.update_host_folder(Some(new_host_folder), true);
                 }
                 should_render = true;
@@ -100,7 +98,10 @@ impl ZellijPlugin for State {
                     should_render = true;
                 }
                 BareKey::Enter if key.has_no_modifiers() => {
-                    self.focus_selected_item();
+                    self.focus_selected_item_table1();
+                }
+                BareKey::Tab if key.has_no_modifiers() => {
+                    self.focus_selected_item_table2();
                 }
                 BareKey::Char(character) if key.has_no_modifiers() => {
                     self.search_state.add_char(character);
@@ -126,12 +127,8 @@ impl ZellijPlugin for State {
                     let mut config = BTreeMap::new();
                     let mut args = BTreeMap::new();
                     self.request_ids.push(request_id.to_string());
-                    // we insert this into the config so that a new plugin will be opened (the plugin's
-                    // uniqueness is determined by its name/url as well as its config)
                     config.insert("request_id".to_owned(), request_id.to_string());
                     config.insert("caller_cwd".to_owned(), self.app_state.get_cwd().display().to_string());
-                    // we also insert this into the args so that the plugin will have an easier access to
-                    // it
                     args.insert("request_id".to_owned(), request_id.to_string());
                     pipe_message_to_plugin(
                         MessageToPlugin::new("filepicker")
@@ -178,16 +175,13 @@ impl ZellijPlugin for State {
     fn render(&mut self, rows: usize, cols: usize) {
         self.ui_state.update_last_rows(rows);
 
-        let (display_count, is_searching) = if self.search_state.is_empty() {
-            (self.app_state.pane_count(), false)
-        } else {
-            (self.search_state.results_count(), true)
-        };
+        let table1_count = self.search_state.files_panes_count();
+        let table2_count = self.search_state.shell_commands_count();
 
-        let available_rows = rows.saturating_sub(8); // Increased to account for cwd line
-        let visible_items = available_rows.min(display_count);
+        let available_rows = rows.saturating_sub(8);
+        let visible_items = available_rows.min(table1_count + table2_count);
 
-        self.ui_state.adjust_scroll_for_selection(visible_items, display_count);
+        self.ui_state.adjust_scroll_for_selection(visible_items, table1_count, table2_count);
 
         let (displayed_files, remaining_files) = self.search_engine.get_displayed_files(
             self.search_state.get_term(),
@@ -199,7 +193,8 @@ impl ZellijPlugin for State {
             cols,
             self.search_state.get_term(),
             self.app_state.get_panes(),
-            self.search_state.get_results(),
+            self.search_state.get_files_panes_results(),
+            self.search_state.get_shell_commands_results(),
             self.ui_state.selected_index,
             self.ui_state.scroll_offset,
             &displayed_files,
@@ -211,25 +206,22 @@ impl ZellijPlugin for State {
 
 impl State {
     fn update_search_results(&mut self) {
-        if self.search_state.is_empty() {
-            self.search_state.update_results(vec![]);
-            self.ui_state.set_selected_index(None);
-            return;
-        }
-
         let rust_assets = self.app_state.get_rust_assets();
-        let results = self.search_engine.search_panes_and_files(
+        let results = self.search_engine.search_dual(
             self.search_state.get_term(),
             self.app_state.get_panes(),
             self.app_state.get_files(),
             &rust_assets,
             self.app_state.get_shell_histories(),
-            self.app_state.get_cwd(), // Pass current working directory
+            self.app_state.get_cwd(),
         );
 
         self.search_state.update_results(results);
 
-        if self.search_state.has_results() {
+        let table1_count = self.search_state.files_panes_count();
+        let table2_count = self.search_state.shell_commands_count();
+
+        if table1_count > 0 || table2_count > 0 {
             self.ui_state.set_selected_index(Some(0));
         } else {
             self.ui_state.set_selected_index(None);
@@ -237,99 +229,92 @@ impl State {
     }
 
     fn move_selection_down(&mut self) {
-        let items_count = if self.search_state.is_empty() {
-            self.app_state.pane_count()
-        } else {
-            self.search_state.results_count()
-        };
-
-        // Only allow selection if there are items to select
-        if items_count > 0 {
-            self.ui_state.move_selection_down(items_count);
+        let table1_count = self.search_state.files_panes_count();
+        let table2_count = self.search_state.shell_commands_count();
+        
+        if table1_count > 0 || table2_count > 0 {
+            self.ui_state.move_selection_down(table1_count, table2_count);
         }
     }
 
     fn move_selection_up(&mut self) {
-        let items_count = if self.search_state.is_empty() {
-            self.app_state.pane_count()
-        } else {
-            self.search_state.results_count()
-        };
-
-        // Only allow selection if there are items to select
-        if items_count > 0 {
-            self.ui_state.move_selection_up(items_count);
+        let table1_count = self.search_state.files_panes_count();
+        let table2_count = self.search_state.shell_commands_count();
+        
+        if table1_count > 0 || table2_count > 0 {
+            self.ui_state.move_selection_up(table1_count, table2_count);
         }
     }
 
-    fn focus_selected_item(&mut self) {
-        if let Some(selected_index) = self.ui_state.selected_index {
-            if self.search_state.is_empty() {
-                // Only try to focus panes if we have panes and are not searching
-                if let Some(pane) = self.app_state.get_panes().get(selected_index) {
-                    let own_plugin_id = get_plugin_ids().plugin_id;
-                    replace_pane_with_existing_pane(PaneId::Plugin(own_plugin_id), pane.id);
-                }
-           } else {
-                // When searching, focus the selected search result
-                if let Some(search_result) = self.search_state.get_results().get(selected_index) {
-                    match &search_result.item {
-                        SearchItem::Pane(pane) => {
-                            let own_plugin_id = get_plugin_ids().plugin_id;
-                            replace_pane_with_existing_pane(PaneId::Plugin(own_plugin_id), pane.id);
-                        },
-                        SearchItem::File(file) => {
-                            let should_close_plugin = true;
-                            open_file_in_place_of_plugin(
-                                FileToOpen::new(self.app_state.get_cwd().join(file)),
-                                should_close_plugin,
-                                Default::default(),
-                            );
-                        },
-                        SearchItem::RustAsset(rust_asset) => {
-                            let should_close_plugin = true;
-                            let mut file_to_open = FileToOpen::new(self.app_state.get_cwd().join(&rust_asset.file_path));
-                            file_to_open.line_number = Some(rust_asset.line_number);
-                            open_file_in_place_of_plugin(
-                                file_to_open,
-                                should_close_plugin,
-                                Default::default(),
-                            );
-                        },
-                        SearchItem::ShellCommand { command, shell, .. } => {
-                            // Execute the shell command in a new terminal pane
-                            let should_close_plugin = true;
-                            let command_to_run = CommandToRun {
-                                path: PathBuf::from(shell),
-                                args: vec!["-ic".to_owned(), command.to_string() ],
-                                cwd: Some(self.app_state.get_cwd().clone()),
-                            };
-                            open_command_pane_in_place_of_plugin(
-                                command_to_run,
-                                should_close_plugin,
-                                Default::default(),
-                            );
-                        }
-                    }
-                }
+    fn focus_selected_item_table1(&mut self) {
+        let table1_count = self.search_state.files_panes_count();
+        
+        if let Some(table1_index) = self.ui_state.get_table1_selected_index(table1_count) {
+            if let Some(search_result) = self.search_state.get_files_panes_results().get(table1_index).cloned() {
+                self.execute_search_result_action(&search_result);
+            }
+        }
+    }
+
+    fn focus_selected_item_table2(&mut self) {
+        let table1_count = self.search_state.files_panes_count();
+        
+        if let Some(table2_index) = self.ui_state.get_table2_selected_index(table1_count) {
+            if let Some(search_result) = self.search_state.get_shell_commands_results().get(table2_index).cloned() {
+                self.execute_search_result_action(&search_result);
+            }
+        }
+    }
+
+    fn execute_search_result_action(&mut self, search_result: &crate::search::SearchResult) {
+        match &search_result.item {
+            SearchItem::Pane(pane) => {
+                let own_plugin_id = get_plugin_ids().plugin_id;
+                replace_pane_with_existing_pane(PaneId::Plugin(own_plugin_id), pane.id);
+            },
+            SearchItem::File(file) => {
+                let should_close_plugin = true;
+                open_file_in_place_of_plugin(
+                    FileToOpen::new(self.app_state.get_cwd().join(file)),
+                    should_close_plugin,
+                    Default::default(),
+                );
+            },
+            SearchItem::RustAsset(rust_asset) => {
+                let should_close_plugin = true;
+                let mut file_to_open = FileToOpen::new(self.app_state.get_cwd().join(&rust_asset.file_path));
+                file_to_open.line_number = Some(rust_asset.line_number);
+                open_file_in_place_of_plugin(
+                    file_to_open,
+                    should_close_plugin,
+                    Default::default(),
+                );
+            },
+            SearchItem::ShellCommand { command, shell, .. } => {
+                let should_close_plugin = true;
+                let command_to_run = CommandToRun {
+                    path: PathBuf::from(shell),
+                    args: vec!["-ic".to_owned(), command.to_string() ],
+                    cwd: Some(self.app_state.get_cwd().clone()),
+                };
+                open_command_pane(
+                    command_to_run,
+                    Default::default(),
+                );
             }
         }
     }
 
     fn adjust_selection_after_pane_update(&mut self) {
-        let items_count = if self.search_state.is_empty() {
-            self.app_state.pane_count()
-        } else {
-            self.search_state.results_count()
-        };
+        let table1_count = self.search_state.files_panes_count();
+        let table2_count = self.search_state.shell_commands_count();
 
-        self.ui_state.adjust_selection_after_update(items_count);
+        self.ui_state.adjust_selection_after_update(table1_count, table2_count);
     }
 
     fn populate_shell_histories(&mut self) {
         eprintln!("reading shell histories...");
         let shell_histories = read_shell_histories();
-        // Convert HashMap to BTreeMap for consistency
         let btree_histories: BTreeMap<String, Vec<DeduplicatedCommand>> = shell_histories.into_iter().collect();
         self.app_state.update_shell_histories(btree_histories);
         eprintln!("done");

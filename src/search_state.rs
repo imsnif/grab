@@ -1,9 +1,10 @@
-use crate::search::SearchResult;
+use crate::search::{SearchResult, DualSearchResults};
 
 #[derive(Default)]
 pub struct SearchState {
     pub search_term: String,
-    pub search_results: Vec<SearchResult>,
+    pub files_panes_results: Vec<SearchResult>,
+    pub shell_commands_results: Vec<SearchResult>,
 }
 
 impl SearchState {
@@ -31,23 +32,40 @@ impl SearchState {
         self.search_term.is_empty()
     }
 
-    pub fn update_results(&mut self, results: Vec<SearchResult>) {
-        self.search_results = results;
+    pub fn update_results(&mut self, results: DualSearchResults) {
+        self.files_panes_results = results.files_panes_results;
+        self.shell_commands_results = results.shell_commands_results;
     }
 
-    pub fn get_results(&self) -> &[SearchResult] {
-        &self.search_results
+    pub fn get_files_panes_results(&self) -> &[SearchResult] {
+        &self.files_panes_results
     }
 
-    pub fn results_count(&self) -> usize {
-        self.search_results.len()
+    pub fn get_shell_commands_results(&self) -> &[SearchResult] {
+        &self.shell_commands_results
+    }
+
+    pub fn files_panes_count(&self) -> usize {
+        self.files_panes_results.len()
+    }
+
+    pub fn shell_commands_count(&self) -> usize {
+        self.shell_commands_results.len()
     }
 
     pub fn get_term(&self) -> &str {
         &self.search_term
     }
 
-    pub fn has_results(&self) -> bool {
-        !self.search_results.is_empty()
+    pub fn has_files_panes_results(&self) -> bool {
+        !self.files_panes_results.is_empty()
+    }
+
+    pub fn has_shell_commands_results(&self) -> bool {
+        !self.shell_commands_results.is_empty()
+    }
+
+    pub fn has_any_results(&self) -> bool {
+        self.has_files_panes_results() || self.has_shell_commands_results()
     }
 }

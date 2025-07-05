@@ -20,6 +20,12 @@ pub enum SearchItem {
     ShellCommand { shell: String, command: String, folders: Vec<String> },
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct DualSearchResults {
+    pub files_panes_results: Vec<SearchResult>,
+    pub shell_commands_results: Vec<SearchResult>,
+}
+
 impl SearchResult {
     pub fn new_pane(pane: PaneMetadata, score: i64, indices: Vec<usize>) -> Self {
         SearchResult {
@@ -92,7 +98,6 @@ impl SearchEngine {
         }
     }
 
-    /// Check if the matched character indices form a contiguous sequence
     fn is_contiguous_match(indices: &[usize]) -> bool {
         if indices.len() <= 1 {
             return true;
@@ -106,7 +111,7 @@ impl SearchEngine {
         true
     }
 
-    pub fn search_panes_and_files(
+    pub fn search_dual(
         &self,
         search_term: &str,
         panes: &[PaneMetadata],
@@ -114,18 +119,98 @@ impl SearchEngine {
         rust_assets: &[TypeDefinition],
         shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
         current_cwd: &PathBuf,
-    ) -> Vec<SearchResult> {
+    ) -> DualSearchResults {
+        let mut results = DualSearchResults::default();
+
         if search_term.is_empty() {
-            return vec![];
+            // Return all items when no search term
+            results.files_panes_results = self.get_all_files_panes_rust(panes, files, rust_assets);
+            results.shell_commands_results = self.get_all_shell_commands(shell_histories, current_cwd);
+            return results;
         }
 
+        // Search files, panes, and rust assets
+        results.files_panes_results = self.search_files_panes_rust(search_term, panes, files, rust_assets);
+        
+        // Search shell commands
+        results.shell_commands_results = self.search_shell_commands_prioritized(
+            search_term,
+            shell_histories,
+            current_cwd,
+        );
+
+        results
+    }
+
+    fn get_all_files_panes_rust(
+        &self,
+        panes: &[PaneMetadata],
+        files: &[PathBuf],
+        rust_assets: &[TypeDefinition],
+    ) -> Vec<SearchResult> {
+        let mut results = Vec::new();
+
+        // Add all panes
+        for pane in panes {
+            results.push(SearchResult::new_pane(pane.clone(), 1000, vec![]));
+        }
+
+        // Add all rust assets
+        for rust_asset in rust_assets {
+            results.push(SearchResult::new_rust_asset(rust_asset.clone(), 500, vec![]));
+        }
+
+        // Add limited files (top 50)
+        for (i, file) in files.iter().enumerate() {
+            if i >= 50 {
+                break;
+            }
+            results.push(SearchResult::new_file(file.clone(), 100, vec![]));
+        }
+
+        results
+    }
+
+    fn get_all_shell_commands(
+        &self,
+        shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
+        current_cwd: &PathBuf,
+    ) -> Vec<SearchResult> {
+        let mut results = Vec::new();
+        let current_cwd_str = current_cwd.to_string_lossy().to_string();
+
+        for (shell_name, deduplicated_commands) in shell_histories {
+            for cmd in deduplicated_commands {
+                let score = if cmd.folders.contains(&current_cwd_str) { 1000 } else { 500 };
+                results.push(SearchResult::new_shell_command(
+                    shell_name.clone(),
+                    cmd.command.clone(),
+                    cmd.folders.clone(),
+                    score,
+                    vec![],
+                ));
+            }
+        }
+
+        // Sort by score and recency
+        results.sort_by(|a, b| b.score.cmp(&a.score));
+        results.truncate(100);
+        results
+    }
+
+    fn search_files_panes_rust(
+        &self,
+        search_term: &str,
+        panes: &[PaneMetadata],
+        files: &[PathBuf],
+        rust_assets: &[TypeDefinition],
+    ) -> Vec<SearchResult> {
         let mut matches = vec![];
 
         // Search panes with contiguous match scoring
         for pane in panes {
             if let Some((score, indices)) = self.matcher.fuzzy_indices(&pane.title, search_term) {
                 let boosted_score = if Self::is_contiguous_match(&indices) {
-                    // Apply 10x multiplier for contiguous matches to ensure they rank above scattered ones
                     score.saturating_mul(10)
                 } else {
                     score
@@ -135,21 +220,14 @@ impl SearchEngine {
             }
         }
 
-        // Search rust assets (no contiguous match boosting)
+        // Search rust assets
         for rust_asset in rust_assets {
             if let Some((score, indices)) = self.matcher.fuzzy_indices(&rust_asset.name, search_term) {
                 matches.push(SearchResult::new_rust_asset(rust_asset.clone(), score, indices));
             }
         }
 
-        // Search shell history commands with prioritization
-        let shell_matches = self.search_shell_commands_prioritized(
-            search_term,
-            shell_histories,
-            current_cwd,
-        );
-
-        // Search files (limited to top 3, no contiguous match boosting)
+        // Search files (limited to top 3)
         let mut file_matches = vec![];
         for file in files {
             let file_string = file.to_string_lossy();
@@ -162,14 +240,12 @@ impl SearchEngine {
         file_matches.sort_by(|a, b| b.score.cmp(&a.score));
         file_matches.truncate(3);
 
-        matches.extend(shell_matches);
         matches.extend(file_matches);
         matches.sort_by(|a, b| b.score.cmp(&a.score));
 
         matches
     }
 
-    /// Search shell commands with directory-based prioritization and recency sorting
     fn search_shell_commands_prioritized(
         &self,
         search_term: &str,
@@ -192,7 +268,6 @@ impl SearchEngine {
                         indices,
                     );
 
-                    // Check if command was executed in current directory
                     let is_current_dir = cmd.folders.contains(&current_cwd_str);
 
                     if is_current_dir {
@@ -204,38 +279,31 @@ impl SearchEngine {
             }
         }
 
-        // Sort each group by score (descending), then by timestamp (most recent first)
         Self::sort_shell_matches_by_score_and_recency(&mut current_dir_matches);
         Self::sort_shell_matches_by_score_and_recency(&mut other_dir_matches);
 
-        // Combine results: current directory first, then others
         let mut final_matches = Vec::new();
         final_matches.extend(current_dir_matches.into_iter().map(|(result, _)| result));
         final_matches.extend(other_dir_matches.into_iter().map(|(result, _)| result));
 
-        // Apply the 5-command limit after prioritization
-        final_matches.truncate(5);
-
+        final_matches.truncate(50);
         final_matches
     }
 
-    /// Sort shell command matches by score (descending), then by recency (most recent first)
     fn sort_shell_matches_by_score_and_recency(
         matches: &mut Vec<(SearchResult, Option<u64>)>,
     ) {
         matches.sort_by(|a, b| {
-            // First, sort by score (descending)
             let score_cmp = b.0.score.cmp(&a.0.score);
             if score_cmp != std::cmp::Ordering::Equal {
                 return score_cmp;
             }
 
-            // If scores are equal, sort by timestamp (most recent first)
             match (&b.1, &a.1) {
                 (Some(timestamp_b), Some(timestamp_a)) => timestamp_b.cmp(timestamp_a),
-                (Some(_), None) => std::cmp::Ordering::Less, // Commands with timestamp come first
+                (Some(_), None) => std::cmp::Ordering::Less,
                 (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal, // Both have no timestamp
+                (None, None) => std::cmp::Ordering::Equal,
             }
         });
     }
