@@ -4,6 +4,7 @@ use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
 use crate::read_shell_histories::DeduplicatedCommand;
+use crate::{RustAssetSearchMode, parse_rust_asset_search};
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
@@ -106,16 +107,30 @@ impl SearchEngine {
         _shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
         _current_cwd: &PathBuf,
     ) -> SearchResults {
+        eprintln!("search: {:?}", search_term);
         let mut results = SearchResults::default();
 
         if search_term.is_empty() {
+            eprintln!("is empty?");
             // Return all items when no search term
             results.files_panes_results = self.get_all_files_panes_rust(panes, files, rust_assets);
             return results;
         }
 
-        // Search files, panes, and rust assets
-        results.files_panes_results = self.search_files_panes_rust(search_term, panes, files, rust_assets);
+        // Check if this is a Rust asset search (struct/enum)
+        if let Some(rust_mode) = parse_rust_asset_search(search_term) {
+            eprintln!("can has rust asset search");
+            // For Rust asset searches, only search rust assets with the term after the keyword
+            let actual_search_term = match &rust_mode {
+                RustAssetSearchMode::Struct(term) => term,
+                RustAssetSearchMode::Enum(term) => term,
+            };
+            results.files_panes_results = self.search_rust_assets_only(actual_search_term, rust_assets, &rust_mode);
+        } else {
+            eprintln!("can has NOT rust asset search");
+            // Normal search: files, panes, and rust assets
+            results.files_panes_results = self.search_files_panes_rust(search_term, panes, files, rust_assets);
+        }
 
         results
     }
@@ -187,6 +202,41 @@ impl SearchEngine {
 
         matches.sort_by(|a, b| b.score.cmp(&a.score));
 
+        matches
+    }
+
+    fn search_rust_assets_only(
+        &self,
+        search_term: &str,
+        rust_assets: &[TypeDefinition],
+        mode: &RustAssetSearchMode,
+    ) -> Vec<SearchResult> {
+        eprintln!("search_rust_assets_only: {:?}", search_term);
+        let mut matches = vec![];
+
+        for rust_asset in rust_assets {
+            eprintln!("loop rust_asset: {:?}", rust_asset);
+            // Filter by type first
+            let type_matches = match mode {
+                RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Struct),
+                RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Enum),
+            };
+
+            if type_matches {
+                eprintln!("matches");
+                if search_term.is_empty() {
+                    eprintln!("is empty");
+                    // If no search term after the keyword, show all of that type
+                    matches.push(SearchResult::new_rust_asset(rust_asset.clone(), 1000, vec![]));
+                } else if let Some((score, indices)) = self.matcher.fuzzy_indices(&rust_asset.name, search_term) {
+                    eprintln!("not is empty");
+                    // Fuzzy match against the rust asset name
+                    matches.push(SearchResult::new_rust_asset(rust_asset.clone(), score, indices));
+                }
+            }
+        }
+
+        matches.sort_by(|a, b| b.score.cmp(&a.score));
         matches
     }
 

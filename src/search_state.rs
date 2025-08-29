@@ -1,4 +1,6 @@
 use crate::search::{SearchResult, SearchResults, SearchItem};
+use crate::{RustAssetSearchMode, parse_rust_asset_search};
+use crate::files::TypeKind;
 
 #[derive(Default)]
 pub struct SearchState {
@@ -70,5 +72,60 @@ impl SearchState {
 
     pub fn has_any_results(&self) -> bool {
         self.has_files_panes_results()
+    }
+
+    // Check if current search term is a Rust asset search
+    pub fn is_rust_asset_search(&self) -> bool {
+        parse_rust_asset_search(&self.search_term).is_some()
+    }
+
+    // Get Rust asset search mode if applicable
+    pub fn get_rust_asset_search_mode(&self) -> Option<RustAssetSearchMode> {
+        parse_rust_asset_search(&self.search_term)
+    }
+
+    // Get filtered results for Rust asset search (only matching Rust assets)
+    pub fn get_rust_asset_display_results(&self) -> Vec<SearchResult> {
+        if let Some(mode) = self.get_rust_asset_search_mode() {
+            self.files_panes_results
+                .iter()
+                .filter(|result| {
+                    if let SearchItem::RustAsset(rust_asset) = &result.item {
+                        match &mode {
+                            RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, TypeKind::Struct),
+                            RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, TypeKind::Enum),
+                        }
+                    } else {
+                        false
+                    }
+                })
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    // Count only Rust assets matching the search mode
+    pub fn rust_asset_display_count(&self) -> usize {
+        self.get_rust_asset_display_results().len()
+    }
+
+    // Get the actual display count based on search mode
+    pub fn get_current_display_count(&self) -> usize {
+        if self.is_rust_asset_search() {
+            self.rust_asset_display_count()
+        } else {
+            self.display_count()
+        }
+    }
+
+    // Get the appropriate display results based on search mode
+    pub fn get_current_display_results(&self) -> Vec<SearchResult> {
+        if self.is_rust_asset_search() {
+            self.get_rust_asset_display_results()
+        } else {
+            self.get_display_results()
+        }
     }
 }

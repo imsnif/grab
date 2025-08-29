@@ -30,6 +30,37 @@ fn is_current_directory_git_repository() -> bool {
     git_dir.exists() && (git_dir.is_dir() || git_dir.is_file())
 }
 
+// Rust asset search detection
+#[derive(Debug, Clone)]
+pub enum RustAssetSearchMode {
+    Struct(String), // Search term after "struct"
+    Enum(String),   // Search term after "enum"
+}
+
+fn parse_rust_asset_search(search_term: &str) -> Option<RustAssetSearchMode> {
+    // Don't trim initially - we need to preserve trailing spaces
+    
+    if let Some(rest) = search_term.strip_prefix("struct ") {
+        Some(RustAssetSearchMode::Struct(rest.to_string()))
+    } else if let Some(rest) = search_term.strip_prefix("enum ") {
+        Some(RustAssetSearchMode::Enum(rest.to_string()))
+    } else {
+        // Case insensitive check
+        let lower = search_term.to_lowercase();
+        if let Some(_rest) = lower.strip_prefix("struct ") {
+            // Find the original casing for the search term after "struct "
+            let original_rest = &search_term[7..]; // Skip "struct " (7 chars)
+            Some(RustAssetSearchMode::Struct(original_rest.to_string()))
+        } else if let Some(_rest) = lower.strip_prefix("enum ") {
+            // Find the original casing for the search term after "enum "
+            let original_rest = &search_term[5..]; // Skip "enum " (5 chars)
+            Some(RustAssetSearchMode::Enum(original_rest.to_string()))
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct State {
     app_state: AppState,
@@ -185,7 +216,7 @@ impl ZellijPlugin for State {
     fn render(&mut self, rows: usize, cols: usize) {
         self.ui_state.update_last_rows(rows);
 
-        let table_count = self.search_state.display_count();
+        let table_count = self.search_state.get_current_display_count();
 
         let available_rows = rows.saturating_sub(8);
         let visible_items = available_rows.min(table_count);
@@ -227,7 +258,7 @@ impl State {
 
         self.search_state.update_results(results);
 
-        let table_count = self.search_state.display_count();
+        let table_count = self.search_state.get_current_display_count();
 
         if table_count > 0 {
             self.ui_state.set_selected_index(Some(0));
@@ -237,7 +268,7 @@ impl State {
     }
 
     fn move_selection_down(&mut self) {
-        let table_count = self.search_state.display_count();
+        let table_count = self.search_state.get_current_display_count();
         
         if table_count > 0 {
             self.ui_state.move_selection_down(table_count);
@@ -245,7 +276,7 @@ impl State {
     }
 
     fn move_selection_up(&mut self) {
-        let table_count = self.search_state.display_count();
+        let table_count = self.search_state.get_current_display_count();
         
         if table_count > 0 {
             self.ui_state.move_selection_up(table_count);
@@ -254,7 +285,7 @@ impl State {
 
     fn focus_selected_item(&mut self) {
         if let Some(selected_index) = self.ui_state.get_selected_index() {
-            let display_results = self.search_state.get_display_results();
+            let display_results = self.search_state.get_current_display_results();
             if let Some(search_result) = display_results.get(selected_index).cloned() {
                 self.execute_search_result_action(&search_result);
             }
@@ -289,7 +320,7 @@ impl State {
     }
 
     fn adjust_selection_after_pane_update(&mut self) {
-        let table_count = self.search_state.display_count();
+        let table_count = self.search_state.get_current_display_count();
 
         self.ui_state.adjust_selection_after_update(table_count);
     }

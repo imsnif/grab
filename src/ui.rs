@@ -2,6 +2,8 @@ use zellij_tile::prelude::*;
 use std::path::PathBuf;
 use crate::search::{SearchResult, SearchItem};
 use crate::pane::PaneMetadata;
+use crate::{RustAssetSearchMode, parse_rust_asset_search};
+use crate::files::TypeKind;
 
 #[derive(Default)]
 pub struct UIRenderer;
@@ -71,24 +73,43 @@ impl UIRenderer {
         cols: usize,
         available_rows: usize,
         search_term: &str,
-        panes: &[PaneMetadata],
+        _panes: &[PaneMetadata],
         files_panes_results: &[SearchResult],
         selected_index: Option<usize>,
         scroll_offset: usize,
         _remaining_files: usize,
         _current_cwd: &PathBuf,
     ) {
-        // Filter out Rust assets - only show panes and files
-        let filtered_results: Vec<SearchResult> = files_panes_results
-            .iter()
-            .filter(|result| matches!(result.item, SearchItem::Pane(_) | SearchItem::File(_)))
-            .cloned()
-            .collect();
+        // Check if we're in Rust asset search mode
+        let filtered_results: Vec<SearchResult> = if let Some(rust_mode) = parse_rust_asset_search(search_term) {
+            // Show only matching Rust assets
+            files_panes_results
+                .iter()
+                .filter(|result| {
+                    if let SearchItem::RustAsset(rust_asset) = &result.item {
+                        match &rust_mode {
+                            RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, TypeKind::Struct),
+                            RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, TypeKind::Enum),
+                        }
+                    } else {
+                        false
+                    }
+                })
+                .cloned()
+                .collect()
+        } else {
+            // Normal mode: filter out Rust assets - only show panes and files
+            files_panes_results
+                .iter()
+                .filter(|result| matches!(result.item, SearchItem::Pane(_) | SearchItem::File(_)))
+                .cloned()
+                .collect()
+        };
 
         let total_items = filtered_results.len();
 
-        if panes.is_empty() && !search_term.is_empty() && filtered_results.is_empty() {
-            self.render_no_results(start_y, base_x);
+        if !search_term.is_empty() && filtered_results.is_empty() {
+            self.render_no_results(start_y, base_x, search_term);
             return;
         }
 
@@ -111,8 +132,16 @@ impl UIRenderer {
         );
     }
 
-    fn render_no_results(&self, start_y: usize, base_x: usize) {
-        let empty_text = Text::new("No matching panes or files found");
+    fn render_no_results(&self, start_y: usize, base_x: usize, search_term: &str) {
+        let message = if let Some(mode) = parse_rust_asset_search(search_term) {
+            match mode {
+                RustAssetSearchMode::Struct(_) => "No matching structs found",
+                RustAssetSearchMode::Enum(_) => "No matching enums found",
+            }
+        } else {
+            "No matching panes or files found"
+        };
+        let empty_text = Text::new(message);
         print_text_with_coordinates(empty_text, base_x, start_y + 2, None, None);
     }
 
@@ -177,9 +206,13 @@ impl UIRenderer {
                         let display_text = search_result.display_text();
                         (display_text, Some(&search_result.indices), "FILE")
                     },
-                    SearchItem::RustAsset(_) => {
-                        // This case should not occur due to filtering, but keeping for completeness
-                        unreachable!("Rust assets should be filtered out before rendering")
+                    SearchItem::RustAsset(rust_asset) => {
+                        let display_text = search_result.display_text();
+                        let item_type = match rust_asset.type_kind {
+                            TypeKind::Struct => "STRUCT",
+                            TypeKind::Enum => "ENUM",
+                        };
+                        (display_text, Some(&search_result.indices), item_type)
                     },
                 };
 
@@ -194,6 +227,7 @@ impl UIRenderer {
                 let color_index = match item_type {
                     "PANE" => 0,
                     "FILE" => 1,
+                    "STRUCT" | "ENUM" => 2,
                     _ => 0,
                 };
                 type_cell = type_cell.color_all(color_index);
