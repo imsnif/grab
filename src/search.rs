@@ -17,13 +17,11 @@ pub enum SearchItem {
     Pane(PaneMetadata),
     File(PathBuf),
     RustAsset(TypeDefinition),
-    ShellCommand { shell: String, command: String, folders: Vec<String> },
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct DualSearchResults {
+pub struct SearchResults {
     pub files_panes_results: Vec<SearchResult>,
-    pub shell_commands_results: Vec<SearchResult>,
 }
 
 impl SearchResult {
@@ -51,14 +49,6 @@ impl SearchResult {
         }
     }
 
-    pub fn new_shell_command(shell: String, command: String, folders: Vec<String>, score: i64, indices: Vec<usize>) -> Self {
-        SearchResult {
-            item: SearchItem::ShellCommand { shell, command, folders },
-            score,
-            indices,
-        }
-    }
-
     pub fn display_text(&self) -> String {
         match &self.item {
             SearchItem::Pane(pane) => pane.title.clone(),
@@ -66,7 +56,6 @@ impl SearchResult {
             SearchItem::RustAsset(rust_asset) => {
                 format!("{} ({})", rust_asset.name, rust_asset.file_path.to_string_lossy())
             }
-            SearchItem::ShellCommand { command, .. } => command.clone(),
         }
     }
 
@@ -82,9 +71,6 @@ impl SearchResult {
         matches!(self.item, SearchItem::RustAsset(_))
     }
 
-    pub fn is_shell_command(&self) -> bool {
-        matches!(self.item, SearchItem::ShellCommand { .. })
-    }
 }
 
 pub struct SearchEngine {
@@ -111,33 +97,25 @@ impl SearchEngine {
         true
     }
 
-    pub fn search_dual(
+    pub fn search(
         &self,
         search_term: &str,
         panes: &[PaneMetadata],
         files: &[PathBuf],
         rust_assets: &[TypeDefinition],
-        shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
-        current_cwd: &PathBuf,
-    ) -> DualSearchResults {
-        let mut results = DualSearchResults::default();
+        _shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
+        _current_cwd: &PathBuf,
+    ) -> SearchResults {
+        let mut results = SearchResults::default();
 
         if search_term.is_empty() {
             // Return all items when no search term
             results.files_panes_results = self.get_all_files_panes_rust(panes, files, rust_assets);
-            results.shell_commands_results = self.get_all_shell_commands(shell_histories, current_cwd);
             return results;
         }
 
         // Search files, panes, and rust assets
         results.files_panes_results = self.search_files_panes_rust(search_term, panes, files, rust_assets);
-        
-        // Search shell commands
-        results.shell_commands_results = self.search_shell_commands_prioritized(
-            search_term,
-            shell_histories,
-            current_cwd,
-        );
 
         results
     }
@@ -168,32 +146,6 @@ impl SearchEngine {
         results
     }
 
-    fn get_all_shell_commands(
-        &self,
-        shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
-        current_cwd: &PathBuf,
-    ) -> Vec<SearchResult> {
-        let mut results = Vec::new();
-        let current_cwd_str = current_cwd.to_string_lossy().to_string();
-
-        for (shell_name, deduplicated_commands) in shell_histories {
-            for cmd in deduplicated_commands {
-                let score = if cmd.folders.contains(&current_cwd_str) { 1000 } else { 500 };
-                results.push(SearchResult::new_shell_command(
-                    shell_name.clone(),
-                    cmd.command.clone(),
-                    cmd.folders.clone(),
-                    score,
-                    vec![],
-                ));
-            }
-        }
-
-        // Sort by score and recency
-        results.sort_by(|a, b| b.score.cmp(&a.score));
-        results.truncate(100);
-        results
-    }
 
     fn search_files_panes_rust(
         &self,
@@ -238,67 +190,6 @@ impl SearchEngine {
         matches
     }
 
-    fn search_shell_commands_prioritized(
-        &self,
-        search_term: &str,
-        shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
-        current_cwd: &PathBuf,
-    ) -> Vec<SearchResult> {
-        let mut current_dir_matches = Vec::new();
-        let mut other_dir_matches = Vec::new();
-        
-        let current_cwd_str = current_cwd.to_string_lossy().to_string();
-
-        for (shell_name, deduplicated_commands) in shell_histories {
-            for cmd in deduplicated_commands {
-                if let Some((score, indices)) = self.matcher.fuzzy_indices(&cmd.command, search_term) {
-                    let search_result = SearchResult::new_shell_command(
-                        shell_name.clone(),
-                        cmd.command.clone(),
-                        cmd.folders.clone(),
-                        score,
-                        indices,
-                    );
-
-                    let is_current_dir = cmd.folders.contains(&current_cwd_str);
-
-                    if is_current_dir {
-                        current_dir_matches.push((search_result, cmd.latest_timestamp));
-                    } else {
-                        other_dir_matches.push((search_result, cmd.latest_timestamp));
-                    }
-                }
-            }
-        }
-
-        Self::sort_shell_matches_by_score_and_recency(&mut current_dir_matches);
-        Self::sort_shell_matches_by_score_and_recency(&mut other_dir_matches);
-
-        let mut final_matches = Vec::new();
-        final_matches.extend(current_dir_matches.into_iter().map(|(result, _)| result));
-        final_matches.extend(other_dir_matches.into_iter().map(|(result, _)| result));
-
-        final_matches.truncate(50);
-        final_matches
-    }
-
-    fn sort_shell_matches_by_score_and_recency(
-        matches: &mut Vec<(SearchResult, Option<u64>)>,
-    ) {
-        matches.sort_by(|a, b| {
-            let score_cmp = b.0.score.cmp(&a.0.score);
-            if score_cmp != std::cmp::Ordering::Equal {
-                return score_cmp;
-            }
-
-            match (&b.1, &a.1) {
-                (Some(timestamp_b), Some(timestamp_a)) => timestamp_b.cmp(timestamp_a),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            }
-        });
-    }
 
     pub fn get_displayed_files(&self, search_term: &str, files: &[PathBuf]) -> (Vec<PathBuf>, usize) {
         if search_term.is_empty() {

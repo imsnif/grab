@@ -2,7 +2,6 @@ use zellij_tile::prelude::*;
 use std::path::PathBuf;
 use crate::search::{SearchResult, SearchItem};
 use crate::pane::PaneMetadata;
-use crate::files::TypeKind;
 
 #[derive(Default)]
 pub struct UIRenderer;
@@ -15,11 +14,11 @@ impl UIRenderer {
         search_term: &str,
         panes: &[PaneMetadata],
         files_panes_results: &[SearchResult],
-        shell_commands_results: &[SearchResult],
+        _shell_commands_results: &[SearchResult],
         selected_index: Option<usize>,
         scroll_offset: usize,
-        displayed_files: &[PathBuf],
-        remaining_files: usize,
+        _displayed_files: &[PathBuf],
+        _remaining_files: usize,
         cwd: &PathBuf,
     ) {
         let base_x = 1;
@@ -43,53 +42,52 @@ impl UIRenderer {
 
         let cwd_y = base_y;
         let search_y = cwd_y + 1;
-        let table1_y = search_y + 1;
+        let table_y = search_y + 1;
 
         print_text_with_coordinates(cwd_text, base_x, cwd_y, None, None);
         print_text_with_coordinates(search_text, base_x, search_y, None, None);
 
-        let available_rows = rows.saturating_sub(table1_y);
-        let table1_rows = available_rows / 2;
-        let table2_rows = available_rows.saturating_sub(table1_rows + 1); // +1 for separator
+        let available_rows = rows.saturating_sub(table_y);
 
-        self.render_dual_tables(
-            table1_y,
+        self.render_single_table(
+            table_y,
             base_x,
             cols,
-            table1_rows,
-            table2_rows,
+            available_rows,
             search_term,
             panes,
             files_panes_results,
-            shell_commands_results,
             selected_index,
             scroll_offset,
-            remaining_files,
+            _remaining_files,
             cwd,
         );
     }
 
-    fn render_dual_tables(
+    fn render_single_table(
         &self,
         start_y: usize,
         base_x: usize,
         cols: usize,
-        table1_rows: usize,
-        table2_rows: usize,
+        available_rows: usize,
         search_term: &str,
         panes: &[PaneMetadata],
         files_panes_results: &[SearchResult],
-        shell_commands_results: &[SearchResult],
         selected_index: Option<usize>,
         scroll_offset: usize,
-        remaining_files: usize,
-        current_cwd: &PathBuf,
+        _remaining_files: usize,
+        _current_cwd: &PathBuf,
     ) {
-        let table1_count = files_panes_results.len();
-        let table2_count = shell_commands_results.len();
-        let total_items = table1_count + table2_count;
+        // Filter out Rust assets - only show panes and files
+        let filtered_results: Vec<SearchResult> = files_panes_results
+            .iter()
+            .filter(|result| matches!(result.item, SearchItem::Pane(_) | SearchItem::File(_)))
+            .cloned()
+            .collect();
 
-        if panes.is_empty() && !search_term.is_empty() && files_panes_results.is_empty() && shell_commands_results.is_empty() {
+        let total_items = filtered_results.len();
+
+        if panes.is_empty() && !search_term.is_empty() && filtered_results.is_empty() {
             self.render_no_results(start_y, base_x);
             return;
         }
@@ -98,49 +96,23 @@ impl UIRenderer {
         let type_column_width = 7;
         let available_title_width = cols.saturating_sub(scroll_indication_space + type_column_width);
 
-        // Table 1: Files/Panes/Rust
-        let table1_y = start_y;
-
-        let table1_content_y = table1_y;
-        let table1_content_rows = table1_rows.saturating_sub(1);
-
         self.render_table(
-            table1_content_y,
+            start_y,
             base_x,
-            table1_content_rows,
-            files_panes_results,
-            0, // Table 1 starts at index 0
+            available_rows,
+            &filtered_results,
+            0, // Table starts at index 0
             selected_index,
             scroll_offset,
             available_title_width,
             total_items,
             false, // is_shell_commands
-            current_cwd,
-        );
-
-        // Table 2: Shell Commands
-        let table2_y = table1_y + table1_rows;
-
-        let table2_content_y = table2_y + 1;
-        let table2_content_rows = table2_rows.saturating_sub(1);
-
-        self.render_table(
-            table2_content_y,
-            base_x,
-            table2_content_rows,
-            shell_commands_results,
-            table1_count, // Table 2 starts after table 1
-            selected_index,
-            scroll_offset,
-            available_title_width,
-            total_items,
-            true, // is_shell_commands
-            current_cwd,
+            _current_cwd,
         );
     }
 
     fn render_no_results(&self, start_y: usize, base_x: usize) {
-        let empty_text = Text::new("No matching panes, files, definitions, or shell commands found");
+        let empty_text = Text::new("No matching panes or files found");
         print_text_with_coordinates(empty_text, base_x, start_y + 2, None, None);
     }
 
@@ -156,7 +128,7 @@ impl UIRenderer {
         available_title_width: usize,
         total_items: usize,
         is_shell_commands: bool,
-        current_cwd: &PathBuf,
+        _current_cwd: &PathBuf,
     ) {
         if results.is_empty() {
             let empty_message = if is_shell_commands {
@@ -205,26 +177,10 @@ impl UIRenderer {
                         let display_text = search_result.display_text();
                         (display_text, Some(&search_result.indices), "FILE")
                     },
-                    SearchItem::RustAsset(rust_asset) => {
-                        let display_text = search_result.display_text();
-                        let item_type = match rust_asset.type_kind {
-                            TypeKind::Struct => "STRUCT",
-                            TypeKind::Enum => "ENUM",
-                        };
-                        (display_text, Some(&search_result.indices), item_type)
+                    SearchItem::RustAsset(_) => {
+                        // This case should not occur due to filtering, but keeping for completeness
+                        unreachable!("Rust assets should be filtered out before rendering")
                     },
-                    SearchItem::ShellCommand { command, folders, shell } => {
-                        let display_text = self.format_shell_command_display(command, folders, current_cwd);
-                        let item_type = match shell.to_uppercase().as_str() {
-                            "BASH" => "BASH",
-                            "ZSH" => "ZSH", 
-                            "FISH" => "FISH",
-                            "SH" => "SH",
-                            "KSH" => "KSH",
-                            _ => "SHELL",
-                        };
-                        (display_text, Some(&search_result.indices), item_type)
-                    }
                 };
 
                 let truncated_title = truncate_middle(&display_text, available_title_width);
@@ -238,8 +194,6 @@ impl UIRenderer {
                 let color_index = match item_type {
                     "PANE" => 0,
                     "FILE" => 1,
-                    "STRUCT" | "ENUM" => 2,
-                    "BASH" | "ZSH" | "FISH" | "SH" | "KSH" | "SHELL" => 4,
                     _ => 0,
                 };
                 type_cell = type_cell.color_all(color_index);
@@ -271,8 +225,7 @@ impl UIRenderer {
                     let indicator_text = format!("↓ {} more", remaining);
                     Text::new(&indicator_text).color_all(1)
                 } else if is_selected {
-                    let shortcut = if is_shell_commands { " <Enter>" } else { " <Tab>" };
-                    Text::new(shortcut).color_all(3)
+                    Text::new(" <Enter>").color_all(3)
                 } else {
                     Text::new(" ")
                 };
@@ -284,56 +237,6 @@ impl UIRenderer {
         print_table_with_coordinates(table, base_x, table_y, None, None);
     }
 
-    fn format_shell_command_display(&self, command: &str, folders: &[String], current_cwd: &PathBuf) -> String {
-        let current_cwd_str = current_cwd.to_string_lossy().to_string();
-        
-        if folders.is_empty() {
-            return command.to_string();
-        }
-        
-        let has_current_dir = folders.contains(&current_cwd_str);
-        
-        if folders.len() == 1 {
-            let folder = &folders[0];
-            if folder == &current_cwd_str {
-                format!("{} (here)", command)
-            } else if folder == "unknown" {
-                command.to_string()
-            } else {
-                let folder_display = self.truncate_folder_path(folder);
-                format!("{} ({})", command, folder_display)
-            }
-        } else {
-            if has_current_dir {
-                let other_count = folders.len().saturating_sub(1);
-                if other_count == 1 {
-                    format!("{} (here +1 other)", command)
-                } else {
-                    format!("{} (here +{} others)", command, other_count)
-                }
-            } else {
-                format!("{} ({} folders)", command, folders.len())
-            }
-        }
-    }
-
-    fn truncate_folder_path(&self, path: &str) -> String {
-        let path_buf = PathBuf::from(path);
-        let components: Vec<_> = path_buf.components().collect();
-        
-        if components.len() <= 2 {
-            path.to_string()
-        } else {
-            let last_two: Vec<String> = components
-                .iter()
-                .rev()
-                .take(2)
-                .rev()
-                .map(|c| c.as_os_str().to_string_lossy().to_string())
-                .collect();
-            format!(".../{}", last_two.join("/"))
-        }
-    }
 }
 
 pub fn truncate_middle(text: &str, max_width: usize) -> String {

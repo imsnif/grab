@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::collections::BTreeMap;
 use crate::pane::PaneMetadata;
-use crate::search::SearchResult;
 use crate::files::TypeDefinition;
 use crate::read_shell_histories::DeduplicatedCommand;
 

@@ -1,10 +1,9 @@
-use crate::search::{SearchResult, DualSearchResults};
+use crate::search::{SearchResult, SearchResults, SearchItem};
 
 #[derive(Default)]
 pub struct SearchState {
     pub search_term: String,
     pub files_panes_results: Vec<SearchResult>,
-    pub shell_commands_results: Vec<SearchResult>,
 }
 
 impl SearchState {
@@ -32,25 +31,33 @@ impl SearchState {
         self.search_term.is_empty()
     }
 
-    pub fn update_results(&mut self, results: DualSearchResults) {
+    pub fn update_results(&mut self, results: SearchResults) {
         self.files_panes_results = results.files_panes_results;
-        self.shell_commands_results = results.shell_commands_results;
     }
 
     pub fn get_files_panes_results(&self) -> &[SearchResult] {
         &self.files_panes_results
     }
 
-    pub fn get_shell_commands_results(&self) -> &[SearchResult] {
-        &self.shell_commands_results
-    }
-
     pub fn files_panes_count(&self) -> usize {
         self.files_panes_results.len()
     }
 
-    pub fn shell_commands_count(&self) -> usize {
-        self.shell_commands_results.len()
+    // Count only panes and files (excluding Rust assets) for display purposes
+    pub fn display_count(&self) -> usize {
+        self.files_panes_results
+            .iter()
+            .filter(|result| matches!(result.item, SearchItem::Pane(_) | SearchItem::File(_)))
+            .count()
+    }
+
+    // Get filtered results for selection purposes (only panes and files)
+    pub fn get_display_results(&self) -> Vec<SearchResult> {
+        self.files_panes_results
+            .iter()
+            .filter(|result| matches!(result.item, SearchItem::Pane(_) | SearchItem::File(_)))
+            .cloned()
+            .collect()
     }
 
     pub fn get_term(&self) -> &str {
@@ -61,11 +68,7 @@ impl SearchState {
         !self.files_panes_results.is_empty()
     }
 
-    pub fn has_shell_commands_results(&self) -> bool {
-        !self.shell_commands_results.is_empty()
-    }
-
     pub fn has_any_results(&self) -> bool {
-        self.has_files_panes_results() || self.has_shell_commands_results()
+        self.has_files_panes_results()
     }
 }
