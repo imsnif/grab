@@ -117,13 +117,15 @@ impl SearchEngine {
             return results;
         }
 
-        // Check if this is a Rust asset search (struct/enum)
+        // Check if this is a Rust asset search (struct/enum/function)
         if let Some(rust_mode) = parse_rust_asset_search(search_term) {
             eprintln!("can has rust asset search");
             // For Rust asset searches, only search rust assets with the term after the keyword
             let actual_search_term = match &rust_mode {
                 RustAssetSearchMode::Struct(term) => term,
                 RustAssetSearchMode::Enum(term) => term,
+                RustAssetSearchMode::Function(term) => term,
+                RustAssetSearchMode::PubFunction(term) => term,
             };
             results.files_panes_results = self.search_rust_assets_only(actual_search_term, rust_assets, &rust_mode);
         } else {
@@ -220,6 +222,8 @@ impl SearchEngine {
             let type_matches = match mode {
                 RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Struct),
                 RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Enum),
+                RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Function | crate::files::TypeKind::PubFunction),
+                RustAssetSearchMode::PubFunction(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::PubFunction),
             };
 
             if type_matches {

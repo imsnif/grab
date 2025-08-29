@@ -90,6 +90,8 @@ impl UIRenderer {
                         match &rust_mode {
                             RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, TypeKind::Struct),
                             RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, TypeKind::Enum),
+                            RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, TypeKind::Function | TypeKind::PubFunction),
+                            RustAssetSearchMode::PubFunction(_) => matches!(rust_asset.type_kind, TypeKind::PubFunction),
                         }
                     } else {
                         false
@@ -137,6 +139,8 @@ impl UIRenderer {
             match mode {
                 RustAssetSearchMode::Struct(_) => "No matching structs found",
                 RustAssetSearchMode::Enum(_) => "No matching enums found",
+                RustAssetSearchMode::Function(_) => "No matching functions found",
+                RustAssetSearchMode::PubFunction(_) => "No matching public functions found",
             }
         } else {
             "No matching panes or files found"
@@ -211,6 +215,8 @@ impl UIRenderer {
                         let item_type = match rust_asset.type_kind {
                             TypeKind::Struct => "STRUCT",
                             TypeKind::Enum => "ENUM",
+                            TypeKind::Function => "FN",
+                            TypeKind::PubFunction => "PUB FN",
                         };
                         (display_text, Some(&search_result.indices), item_type)
                     },
@@ -227,7 +233,7 @@ impl UIRenderer {
                 let color_index = match item_type {
                     "PANE" => 0,
                     "FILE" => 1,
-                    "STRUCT" | "ENUM" => 2,
+                    "STRUCT" | "ENUM" | "FN" | "PUB FN" => 2,
                     _ => 0,
                 };
                 type_cell = type_cell.color_all(color_index);

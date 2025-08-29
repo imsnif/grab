@@ -94,6 +94,8 @@ impl SearchState {
                         match &mode {
                             RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, TypeKind::Struct),
                             RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, TypeKind::Enum),
+                            RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, TypeKind::Function | TypeKind::PubFunction),
+                            RustAssetSearchMode::PubFunction(_) => matches!(rust_asset.type_kind, TypeKind::PubFunction),
                         }
                     } else {
                         false

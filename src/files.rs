@@ -14,6 +14,8 @@ pub struct TypeDefinition {
 pub enum TypeKind {
     Struct,
     Enum,
+    Function,    // Any function (fn or pub fn)
+    PubFunction, // Public functions only (pub fn)
 }
 
 pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTreeMap<PathBuf, Vec<TypeDefinition>>> {
@@ -145,6 +147,21 @@ fn scan_with_regex(content: &str, file_path: &PathBuf) -> Result<Vec<TypeDefinit
             });
         }
         
+        // Look for function definitions
+        if let Some((fn_name, is_pub)) = extract_function_name(trimmed) {
+            let type_kind = if is_pub {
+                TypeKind::PubFunction
+            } else {
+                TypeKind::Function
+            };
+            definitions.push(TypeDefinition {
+                type_kind,
+                name: fn_name,
+                file_path: file_path.clone(),
+                line_number: line_num + 1,
+            });
+        }
+        
         // Early exit if we have many definitions in this file
         if definitions.len() > 50 {
             break;
@@ -182,6 +199,26 @@ fn extract_enum_name(line: &str) -> Option<String> {
             let name = name_part.split(['<', '{', '(', ';']).next().unwrap_or(name_part);
             if is_valid_identifier(name) {
                 return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn extract_function_name(line: &str) -> Option<(String, bool)> {
+    // Look for patterns like "pub fn name(" or "fn name(" 
+    let words: Vec<&str> = line.split_whitespace().collect();
+    
+    for i in 0..words.len() {
+        if words[i] == "fn" && i + 1 < words.len() {
+            // Check if it's a public function (previous word is "pub")
+            let is_pub = i > 0 && words[i - 1] == "pub";
+            
+            let name_part = words[i + 1];
+            // Extract just the identifier part (before < or ()
+            let name = name_part.split(['<', '(', ';']).next().unwrap_or(name_part);
+            if is_valid_identifier(name) {
+                return Some((name.to_string(), is_pub));
             }
         }
     }

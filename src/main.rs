@@ -33,21 +33,32 @@ fn is_current_directory_git_repository() -> bool {
 // Rust asset search detection
 #[derive(Debug, Clone)]
 pub enum RustAssetSearchMode {
-    Struct(String), // Search term after "struct"
-    Enum(String),   // Search term after "enum"
+    Struct(String),    // Search term after "struct"
+    Enum(String),      // Search term after "enum"
+    Function(String),  // Search term after "fn" (all functions)
+    PubFunction(String), // Search term after "pub fn" (public functions only)
 }
 
 fn parse_rust_asset_search(search_term: &str) -> Option<RustAssetSearchMode> {
     // Don't trim initially - we need to preserve trailing spaces
     
-    if let Some(rest) = search_term.strip_prefix("struct ") {
+    // Check for "pub fn " first since it's longer and contains "fn "
+    if let Some(rest) = search_term.strip_prefix("pub fn ") {
+        Some(RustAssetSearchMode::PubFunction(rest.to_string()))
+    } else if let Some(rest) = search_term.strip_prefix("struct ") {
         Some(RustAssetSearchMode::Struct(rest.to_string()))
     } else if let Some(rest) = search_term.strip_prefix("enum ") {
         Some(RustAssetSearchMode::Enum(rest.to_string()))
+    } else if let Some(rest) = search_term.strip_prefix("fn ") {
+        Some(RustAssetSearchMode::Function(rest.to_string()))
     } else {
         // Case insensitive check
         let lower = search_term.to_lowercase();
-        if let Some(_rest) = lower.strip_prefix("struct ") {
+        if let Some(_rest) = lower.strip_prefix("pub fn ") {
+            // Find the original casing for the search term after "pub fn "
+            let original_rest = &search_term[7..]; // Skip "pub fn " (7 chars)
+            Some(RustAssetSearchMode::PubFunction(original_rest.to_string()))
+        } else if let Some(_rest) = lower.strip_prefix("struct ") {
             // Find the original casing for the search term after "struct "
             let original_rest = &search_term[7..]; // Skip "struct " (7 chars)
             Some(RustAssetSearchMode::Struct(original_rest.to_string()))
@@ -55,6 +66,10 @@ fn parse_rust_asset_search(search_term: &str) -> Option<RustAssetSearchMode> {
             // Find the original casing for the search term after "enum "
             let original_rest = &search_term[5..]; // Skip "enum " (5 chars)
             Some(RustAssetSearchMode::Enum(original_rest.to_string()))
+        } else if let Some(_rest) = lower.strip_prefix("fn ") {
+            // Find the original casing for the search term after "fn "
+            let original_rest = &search_term[3..]; // Skip "fn " (3 chars)
+            Some(RustAssetSearchMode::Function(original_rest.to_string()))
         } else {
             None
         }
