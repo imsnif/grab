@@ -11,6 +11,7 @@ pub struct AppState {
     pub rust_assets: BTreeMap<PathBuf, Vec<TypeDefinition>>,
     pub cwd: PathBuf,
     pub shell_histories: BTreeMap<String, Vec<DeduplicatedCommand>>, // <shell -> deduplicated commands>
+    pub user_selected_directory: bool, // Flag to track if directory was selected by user
 }
 
 impl AppState {
@@ -68,5 +69,13 @@ impl AppState {
 
     pub fn is_empty(&self) -> bool {
         self.pane_metadata.is_empty()
+    }
+
+    pub fn set_user_selected_directory(&mut self, user_selected: bool) {
+        self.user_selected_directory = user_selected;
+    }
+
+    pub fn is_user_selected_directory(&self) -> bool {
+        self.user_selected_directory
     }
 }

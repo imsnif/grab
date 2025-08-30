@@ -49,7 +49,7 @@ impl UIRenderer {
         print_text_with_coordinates(cwd_text, base_x, cwd_y, None, None);
         print_text_with_coordinates(search_text, base_x, search_y, None, None);
 
-        let available_rows = rows.saturating_sub(table_y);
+        let available_rows = rows.saturating_sub(table_y + 2);
 
         self.render_single_table(
             table_y,

@@ -143,7 +143,9 @@ impl ZellijPlugin for State {
                     // Continue git repository search
                     self.continue_git_repository_search(new_host_folder);
                 } else {
-                    self.update_host_folder(Some(new_host_folder), true);
+                    let user_selected = self.app_state.is_user_selected_directory();
+                    self.app_state.set_user_selected_directory(false); // Reset flag after use
+                    self.update_host_folder_with_scan_control(Some(new_host_folder), true, user_selected);
                 }
                 should_render = true;
             }
@@ -213,6 +215,8 @@ impl ZellijPlugin for State {
                         Some(request_id_position) => {
                             self.request_ids.remove(request_id_position);
                             let new_folder = std::path::PathBuf::from(payload);
+                            // Mark that this is a user-selected directory, so scanning should proceed
+                            self.app_state.set_user_selected_directory(true);
                             change_host_folder(new_folder);
                         },
                         None => {
@@ -349,9 +353,18 @@ impl State {
     }
 
     fn update_host_folder(&mut self, new_host_folder: Option<PathBuf>, force_update: bool) {
+        self.update_host_folder_with_scan_control(new_host_folder, force_update, false);
+    }
+
+    fn update_host_folder_with_scan_control(&mut self, new_host_folder: Option<PathBuf>, force_update: bool, user_selected: bool) {
         let new_host_folder = new_host_folder.unwrap_or_else(|| get_plugin_ids().initial_cwd);
         self.app_state.set_cwd(new_host_folder);
-        if self.app_state.get_files().is_empty() || force_update {
+        
+        // Only scan if conditions are met
+        let should_scan = (self.app_state.get_files().is_empty() || force_update) && 
+                         (is_current_directory_git_repository() || user_selected);
+        
+        if should_scan {
             if let Ok(files_and_rust_assets) = get_all_files("/host") {
                 let files: Vec<PathBuf> = files_and_rust_assets.keys().cloned().collect();
                 self.app_state.update_files(files);
@@ -371,7 +384,8 @@ impl State {
         if is_current_directory_git_repository() {
             eprintln!("Found git repository at: {:?}", current_folder);
             self.searching_for_git_repo = false;
-            self.update_host_folder(Some(current_folder), true);
+            // This is a git repo, so we can scan
+            self.update_host_folder_with_scan_control(Some(current_folder), true, false);
         } else {
             // Try to go to parent directory
             match current_folder.parent() {

@@ -106,7 +106,7 @@ fn scan_rust_file_fast(file_path: &PathBuf) -> Result<Vec<TypeDefinition>, Box<d
     };
     
     // Skip very large files for performance
-    if content.len() > 100_000 {
+    if content.len() > 1_000_000 {
         return Ok(Vec::new());
     }
     
