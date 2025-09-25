@@ -91,7 +91,6 @@ pub struct State {
 
 impl ZellijPlugin for State {
     fn load(&mut self, _configuration: BTreeMap<String, String>) {
-        eprintln!("load");
         request_permission(&[
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
@@ -116,7 +115,6 @@ impl ZellijPlugin for State {
         let mut should_render = false;
         match event {
             Event::PermissionRequestResult(_) => {
-                eprintln!("PermissionRequestResult");
                 let own_plugin_id = get_plugin_ids().plugin_id;
                 rename_plugin_pane(own_plugin_id, "Grab...");
                 
@@ -135,7 +133,6 @@ impl ZellijPlugin for State {
                 should_render = true;
             }
             Event::HostFolderChanged(new_host_folder) => {
-                eprintln!("HostFolderChanged to: {:?}", new_host_folder);
                 if let Some(initial_cwd) = self.initial_cwd.take() {
                     self.populate_shell_histories();
                     change_host_folder(initial_cwd);
@@ -345,11 +342,9 @@ impl State {
     }
 
     fn populate_shell_histories(&mut self) {
-        eprintln!("reading shell histories...");
         let shell_histories = read_shell_histories();
         let btree_histories: BTreeMap<String, Vec<DeduplicatedCommand>> = shell_histories.into_iter().collect();
         self.app_state.update_shell_histories(btree_histories);
-        eprintln!("done");
     }
 
     fn update_host_folder(&mut self, new_host_folder: Option<PathBuf>, force_update: bool) {
@@ -376,13 +371,11 @@ impl State {
 
     fn start_git_repository_search(&mut self) {
         let initial_cwd = get_plugin_ids().initial_cwd;
-        eprintln!("Starting git repository search from: {:?}", initial_cwd);
         change_host_folder(initial_cwd);
     }
 
     fn continue_git_repository_search(&mut self, current_folder: PathBuf) {
         if is_current_directory_git_repository() {
-            eprintln!("Found git repository at: {:?}", current_folder);
             self.searching_for_git_repo = false;
             // This is a git repo, so we can scan
             self.update_host_folder_with_scan_control(Some(current_folder), true, false);
@@ -390,12 +383,10 @@ impl State {
             // Try to go to parent directory
             match current_folder.parent() {
                 Some(parent) if parent != current_folder => {
-                    eprintln!("Not a git repo, trying parent: {:?}", parent);
                     change_host_folder(parent.to_path_buf());
                 }
                 _ => {
                     // Reached root or can't go further up
-                    eprintln!("No git repository found, asking user to choose folder");
                     self.searching_for_git_repo = false;
                     self.request_folder_selection();
                 }
