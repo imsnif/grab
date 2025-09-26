@@ -47,22 +47,17 @@ impl ZellijPlugin for State {
     }
 
     fn update(&mut self, event: Event) -> bool {
-        eprintln!("update");
         let mut should_render = false;
         match event {
             Event::PermissionRequestResult(_) => {
                 let own_plugin_id = get_plugin_ids().plugin_id;
                 rename_plugin_pane(own_plugin_id, "Focus or open...");
-                eprintln!("can");
-                eprintln!("has");
             }
             Event::TabUpdate(tab_info) => {
                 self.tabs = tab_info;
             }
             Event::PaneUpdate(pane_manifest) => {
-                eprintln!("checking pending pane moves");
                 self.check_pending_pane_moves(&pane_manifest);
-                eprintln!("done checking");
                 
                 let panes = extract_editor_pane_metadata(&pane_manifest);
                 self.app_state.update_panes(panes);
@@ -234,7 +229,6 @@ impl State {
         }
 
         if !completed_moves.is_empty() && self.pending_pane_moves.is_empty() {
-            eprintln!("closing self");
             close_self();
         }
     }
@@ -254,7 +248,6 @@ impl State {
                         SearchItem::Pane(pane) => {
                             if let Some(tab_index) = self.get_picker_tab_index() {
                                 self.pending_pane_moves.push(pane.id);
-                                eprintln!("breaking pane");
                                 break_panes_to_tab_with_index(&[pane.id], tab_index, true);
                             }
                         },

@@ -216,9 +216,7 @@ impl ZellijPlugin for State {
                             self.app_state.set_user_selected_directory(true);
                             change_host_folder(new_folder);
                         },
-                        None => {
-                            eprintln!("request id not found");
-                        },
+                        None => {},
                     }
                 },
                 _ => {},
