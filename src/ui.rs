@@ -49,7 +49,7 @@ impl UIRenderer {
         print_text_with_coordinates(cwd_text, base_x, cwd_y, None, None);
         print_text_with_coordinates(search_text, base_x, search_y, None, None);
 
-        let available_rows = rows.saturating_sub(table_y + 2);
+        let available_rows = rows.saturating_sub(table_y + 3); // Reserve space for hint line
 
         self.render_single_table(
             table_y,
@@ -64,6 +64,14 @@ impl UIRenderer {
             _remaining_files,
             cwd,
         );
+
+        // Render hint line at the bottom
+        let hint_y = rows.saturating_sub(1);
+        let hint_text = "Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets";
+        let max_hint_width = cols.saturating_sub(2);
+        let truncated_hint = truncate_middle(hint_text, max_hint_width);
+        let hint_display = Text::new(&truncated_hint).color_substring(3, "Hint:");
+        print_text_with_coordinates(hint_display, base_x, hint_y, None, None);
     }
 
     fn render_single_table(
