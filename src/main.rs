@@ -108,7 +108,7 @@ impl ZellijPlugin for State {
         ]);
 
         self.initial_cwd = Some(get_plugin_ids().initial_cwd);
-        self.update_host_folder(None, false);
+        self.update_host_folder(None);
     }
 
     fn update(&mut self, event: Event) -> bool {
@@ -142,7 +142,7 @@ impl ZellijPlugin for State {
                 } else {
                     let user_selected = self.app_state.is_user_selected_directory();
                     self.app_state.set_user_selected_directory(false); // Reset flag after use
-                    self.update_host_folder_with_scan_control(Some(new_host_folder), true, user_selected);
+                    self.update_host_folder_with_scan_control(Some(new_host_folder), user_selected);
                 }
                 should_render = true;
             }
@@ -322,7 +322,7 @@ impl State {
             },
             SearchItem::RustAsset(rust_asset) => {
                 let should_close_plugin = true;
-                let mut file_to_open = FileToOpen::new(self.app_state.get_cwd().join(&rust_asset.file_path));
+                let mut file_to_open = FileToOpen::new(self.app_state.get_cwd().join(rust_asset.file_path.as_ref()));
                 file_to_open.line_number = Some(rust_asset.line_number);
                 open_file_in_place_of_plugin(
                     file_to_open,
@@ -345,16 +345,16 @@ impl State {
         self.app_state.update_shell_histories(btree_histories);
     }
 
-    fn update_host_folder(&mut self, new_host_folder: Option<PathBuf>, force_update: bool) {
-        self.update_host_folder_with_scan_control(new_host_folder, force_update, false);
+    fn update_host_folder(&mut self, new_host_folder: Option<PathBuf>) {
+        self.update_host_folder_with_scan_control(new_host_folder, false);
     }
 
-    fn update_host_folder_with_scan_control(&mut self, new_host_folder: Option<PathBuf>, force_update: bool, user_selected: bool) {
+    fn update_host_folder_with_scan_control(&mut self, new_host_folder: Option<PathBuf>, user_selected: bool) {
         let new_host_folder = new_host_folder.unwrap_or_else(|| get_plugin_ids().initial_cwd);
         self.app_state.set_cwd(new_host_folder);
         
         // Only scan if conditions are met
-        let should_scan = (self.app_state.get_files().is_empty() || force_update) && 
+        let should_scan = self.app_state.get_files().is_empty() && 
                          (is_current_directory_git_repository() || user_selected);
         
         if should_scan {
@@ -376,7 +376,7 @@ impl State {
         if is_current_directory_git_repository() {
             self.searching_for_git_repo = false;
             // This is a git repo, so we can scan
-            self.update_host_folder_with_scan_control(Some(current_folder), true, false);
+            self.update_host_folder_with_scan_control(Some(current_folder), false);
         } else {
             // Try to go to parent directory
             match current_folder.parent() {

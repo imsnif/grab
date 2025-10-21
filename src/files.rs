@@ -1,12 +1,13 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub struct TypeDefinition {
     pub type_kind: TypeKind,
     pub name: String,
-    pub file_path: PathBuf,
+    pub file_path: Rc<PathBuf>,
     pub line_number: usize,
 }
 
@@ -83,10 +84,13 @@ pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTree
         .filter(|file_path| file_path.extension().and_then(|ext| ext.to_str()) == Some("rs"))
         .collect();
     
+    eprintln!("before, rust_files: {:#?}", rust_files);
     for file_path in &rust_files {
-        let definitions = scan_rust_file_fast(file_path).unwrap_or_default();
+        let rc_path = Rc::new((*file_path).clone());
+        let definitions = scan_rust_file_fast(&rc_path).unwrap_or_default();
         result.insert((*file_path).clone(), definitions);
     }
+    eprintln!("after");
     
     // Add non-Rust files with empty definitions
     for file_path in files {
@@ -98,131 +102,180 @@ pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTree
     Ok(result)
 }
 
-fn scan_rust_file_fast(file_path: &PathBuf) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
-    // Read file content
-    let content = match fs::read_to_string(PathBuf::from("/host").join(file_path)) {
-        Ok(content) => content,
+fn scan_rust_file_fast(file_path: &Rc<PathBuf>) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
+    // Read file content as bytes first to avoid UTF-8 validation overhead
+    let bytes = match fs::read(PathBuf::from("/host").join(file_path.as_ref())) {
+        Ok(bytes) => bytes,
         Err(_) => return Ok(Vec::new()), // Skip files we can't read
     };
-    
+
     // Skip very large files for performance
-    if content.len() > 1_000_000 {
+    if bytes.len() > 1_000_000 {
         return Ok(Vec::new());
     }
-    
-    // Use regex-based parsing for better performance instead of full AST parsing
-    scan_with_regex(&content, file_path)
+
+    // Use byte-level parsing for better performance
+    scan_with_bytes(&bytes, Rc::clone(file_path))
 }
 
-fn scan_with_regex(content: &str, file_path: &PathBuf) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
+fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
     let mut definitions = Vec::new();
-    
-    // Simple regex patterns for struct and enum detection
-    // This is much faster than full AST parsing
-    for (line_num, line) in content.lines().enumerate() {
-        let trimmed = line.trim();
-        
+    let mut line_num = 1;
+    let mut i = 0;
+
+    while i < bytes.len() {
+        // Skip to start of line content (skip leading whitespace)
+        while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
+            i += 1;
+        }
+
+        if i >= bytes.len() {
+            break;
+        }
+
+        let line_start = i;
+
+        // Find end of line
+        while i < bytes.len() && bytes[i] != b'\n' {
+            i += 1;
+        }
+
+        let line = &bytes[line_start..i];
+
         // Skip comments and empty lines
-        if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.is_empty() {
+        if line.is_empty() || line.starts_with(b"//") || line.starts_with(b"/*") {
+            if i < bytes.len() {
+                i += 1; // Skip newline
+            }
+            line_num += 1;
             continue;
         }
-        
-        // Look for struct definitions
-        if let Some(struct_name) = extract_struct_name(trimmed) {
-            definitions.push(TypeDefinition {
+
+        // Look for "struct ", "enum ", or "fn " keywords
+        if let Some(def) = extract_definition_fast(line, Rc::clone(&file_path), line_num) {
+            definitions.push(def);
+
+            // Early exit if we have many definitions in this file
+            if definitions.len() > 50 {
+                break;
+            }
+        }
+
+        if i < bytes.len() {
+            i += 1; // Skip newline
+        }
+        line_num += 1;
+    }
+
+    Ok(definitions)
+}
+
+// Fast byte-level extraction of struct/enum/fn definitions
+fn extract_definition_fast(line: &[u8], file_path: Rc<PathBuf>, line_num: usize) -> Option<TypeDefinition> {
+    let mut i = 0;
+    let mut is_pub = false;
+
+    // Skip whitespace and check for "pub"
+    while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
+        i += 1;
+    }
+
+    if i + 3 <= line.len() && &line[i..i+3] == b"pub" {
+        i += 3;
+        if i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
+            is_pub = true;
+            // Skip whitespace after pub
+            while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
+                i += 1;
+            }
+        } else {
+            i -= 3; // Not followed by whitespace, revert
+        }
+    }
+
+    // Check for "struct "
+    if i + 7 <= line.len() && &line[i..i+6] == b"struct" && line[i+6] == b' ' {
+        i += 7;
+        if let Some(name) = extract_identifier(&line[i..]) {
+            return Some(TypeDefinition {
                 type_kind: TypeKind::Struct,
-                name: struct_name,
-                file_path: file_path.clone(),
-                line_number: line_num + 1,
+                name,
+                file_path,
+                line_number: line_num,
             });
         }
-        
-        // Look for enum definitions
-        if let Some(enum_name) = extract_enum_name(trimmed) {
-            definitions.push(TypeDefinition {
+    }
+
+    // Check for "enum "
+    if i + 5 <= line.len() && &line[i..i+4] == b"enum" && line[i+4] == b' ' {
+        i += 5;
+        if let Some(name) = extract_identifier(&line[i..]) {
+            return Some(TypeDefinition {
                 type_kind: TypeKind::Enum,
-                name: enum_name,
-                file_path: file_path.clone(),
-                line_number: line_num + 1,
+                name,
+                file_path,
+                line_number: line_num,
             });
         }
-        
-        // Look for function definitions
-        if let Some((fn_name, is_pub)) = extract_function_name(trimmed) {
+    }
+
+    // Check for "fn "
+    if i + 3 <= line.len() && &line[i..i+2] == b"fn" && line[i+2] == b' ' {
+        i += 3;
+        if let Some(name) = extract_identifier(&line[i..]) {
             let type_kind = if is_pub {
                 TypeKind::PubFunction
             } else {
                 TypeKind::Function
             };
-            definitions.push(TypeDefinition {
+            return Some(TypeDefinition {
                 type_kind,
-                name: fn_name,
-                file_path: file_path.clone(),
-                line_number: line_num + 1,
+                name,
+                file_path,
+                line_number: line_num,
             });
         }
-        
-        // Early exit if we have many definitions in this file
-        if definitions.len() > 50 {
+    }
+
+    None
+}
+
+// Extract identifier from bytes (no UTF-8 validation until we find one)
+fn extract_identifier(bytes: &[u8]) -> Option<String> {
+    // Skip leading whitespace
+    let mut start = 0;
+    while start < bytes.len() && (bytes[start] == b' ' || bytes[start] == b'\t') {
+        start += 1;
+    }
+
+    if start >= bytes.len() {
+        return None;
+    }
+
+    // Find end of identifier (until <, {, (, ;, or whitespace)
+    let mut end = start;
+    while end < bytes.len() {
+        let b = bytes[end];
+        if b == b'<' || b == b'{' || b == b'(' || b == b';' || b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
             break;
         }
+        end += 1;
     }
-    
-    Ok(definitions)
-}
 
-fn extract_struct_name(line: &str) -> Option<String> {
-    // Look for patterns like "pub struct Name" or "struct Name"
-    let words: Vec<&str> = line.split_whitespace().collect();
-    
-    for i in 0..words.len() {
-        if words[i] == "struct" && i + 1 < words.len() {
-            let name_part = words[i + 1];
-            // Extract just the identifier part (before < or {)
-            let name = name_part.split(['<', '{', '(', ';']).next().unwrap_or(name_part);
-            if is_valid_identifier(name) {
-                return Some(name.to_string());
-            }
-        }
+    if end == start {
+        return None;
     }
-    None
-}
 
-fn extract_enum_name(line: &str) -> Option<String> {
-    // Look for patterns like "pub enum Name" or "enum Name"
-    let words: Vec<&str> = line.split_whitespace().collect();
-    
-    for i in 0..words.len() {
-        if words[i] == "enum" && i + 1 < words.len() {
-            let name_part = words[i + 1];
-            // Extract just the identifier part (before < or {)
-            let name = name_part.split(['<', '{', '(', ';']).next().unwrap_or(name_part);
-            if is_valid_identifier(name) {
-                return Some(name.to_string());
-            }
-        }
-    }
-    None
-}
+    // Now convert to string (only for the identifier portion)
+    let name_bytes = &bytes[start..end];
+    let name = String::from_utf8_lossy(name_bytes);
 
-fn extract_function_name(line: &str) -> Option<(String, bool)> {
-    // Look for patterns like "pub fn name(" or "fn name(" 
-    let words: Vec<&str> = line.split_whitespace().collect();
-    
-    for i in 0..words.len() {
-        if words[i] == "fn" && i + 1 < words.len() {
-            // Check if it's a public function (previous word is "pub")
-            let is_pub = i > 0 && words[i - 1] == "pub";
-            
-            let name_part = words[i + 1];
-            // Extract just the identifier part (before < or ()
-            let name = name_part.split(['<', '(', ';']).next().unwrap_or(name_part);
-            if is_valid_identifier(name) {
-                return Some((name.to_string(), is_pub));
-            }
-        }
+    // Validate identifier
+    if is_valid_identifier(&name) {
+        Some(name.into_owned())
+    } else {
+        None
     }
-    None
 }
 
 fn is_valid_identifier(name: &str) -> bool {
