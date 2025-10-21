@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use memchr::memchr;
 
 #[derive(Debug, Clone)]
 pub struct TypeDefinition {
@@ -118,51 +119,37 @@ pub fn scan_rust_file_fast(file_path: &Rc<PathBuf>) -> Result<Vec<TypeDefinition
 }
 
 fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
-    let mut definitions = Vec::new();
+    let mut definitions = Vec::with_capacity(64);
     let mut line_num = 1;
-    let mut i = 0;
+    let mut pos = 0;
 
-    while i < bytes.len() {
-        // Skip to start of line content (skip leading whitespace)
-        while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
-            i += 1;
-        }
+    while pos < bytes.len() {
+        // Use memchr to find next newline - much faster than manual iteration
+        let line_end = memchr(b'\n', &bytes[pos..])
+            .map(|i| pos + i)
+            .unwrap_or(bytes.len());
 
-        if i >= bytes.len() {
-            break;
-        }
+        let line = &bytes[pos..line_end];
 
-        let line_start = i;
+        // Quick rejection: skip empty lines and comments
+        if !line.is_empty() {
+            let first_non_ws = line.iter().position(|&b| b != b' ' && b != b'\t');
+            if let Some(start) = first_non_ws {
+                let trimmed = &line[start..];
+                if !trimmed.starts_with(b"//") && !trimmed.starts_with(b"/*") {
+                    if let Some(def) = extract_definition_fast(trimmed, Rc::clone(&file_path), line_num) {
+                        definitions.push(def);
 
-        // Find end of line
-        while i < bytes.len() && bytes[i] != b'\n' {
-            i += 1;
-        }
-
-        let line = &bytes[line_start..i];
-
-        // Skip comments and empty lines
-        if line.is_empty() || line.starts_with(b"//") || line.starts_with(b"/*") {
-            if i < bytes.len() {
-                i += 1; // Skip newline
-            }
-            line_num += 1;
-            continue;
-        }
-
-        // Look for "struct ", "enum ", or "fn " keywords
-        if let Some(def) = extract_definition_fast(line, Rc::clone(&file_path), line_num) {
-            definitions.push(def);
-
-            // Early exit if we have many definitions in this file
-            if definitions.len() >= 300 {
-                break;
+                        // Early exit if we have many definitions
+                        if definitions.len() >= 300 {
+                            break;
+                        }
+                    }
+                }
             }
         }
 
-        if i < bytes.len() {
-            i += 1; // Skip newline
-        }
+        pos = line_end + 1;
         line_num += 1;
     }
 
@@ -170,123 +157,83 @@ fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefin
 }
 
 // Fast byte-level extraction of struct/enum/fn definitions
+// Note: line is already trimmed (leading whitespace removed)
 fn extract_definition_fast(line: &[u8], file_path: Rc<PathBuf>, line_num: usize) -> Option<TypeDefinition> {
-    // Skip leading whitespace
     let mut i = 0;
-    while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
-        i += 1;
-    }
 
-    if i >= line.len() {
-        return None;
-    }
+    // Skip "pub" or "pub(...)"
+    if line.len() >= 3 && &line[..3] == b"pub" {
+        i = 3;
 
-    // Check if line starts with "pub " or "pub(" and skip it
-    if i + 3 <= line.len() && &line[i..i+3] == b"pub" {
-        if i + 3 < line.len() && (line[i+3] == b' ' || line[i+3] == b'(') {
-            i += 3;
-
-            // Skip pub(crate), pub(super), etc.
-            if i < line.len() && line[i] == b'(' {
-                while i < line.len() && line[i] != b')' {
-                    i += 1;
-                }
-                if i < line.len() {
-                    i += 1; // Skip ')'
-                }
-            }
-
-            // Skip whitespace after pub or pub(...)
-            while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
+        // Skip pub(crate), pub(super), etc.
+        if i < line.len() && line[i] == b'(' {
+            while i < line.len() && line[i] != b')' {
                 i += 1;
             }
+            if i < line.len() {
+                i += 1; // Skip ')'
+            }
+        }
+
+        // Skip whitespace after pub
+        while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
+            i += 1;
         }
     }
 
-    // Now check for struct/enum/fn at current position
-
-    // Check for "struct "
-    if i + 6 < line.len() && &line[i..i+6] == b"struct" && line[i+6] == b' ' {
-        if let Some(name) = extract_identifier(&line[i+7..]) {
-            return Some(TypeDefinition {
-                type_kind: TypeKind::Struct,
-                name,
-                file_path,
-                line_number: line_num,
-            });
-        }
-    }
-
-    // Check for "enum "
-    if i + 4 < line.len() && &line[i..i+4] == b"enum" && line[i+4] == b' ' {
-        if let Some(name) = extract_identifier(&line[i+5..]) {
-            return Some(TypeDefinition {
-                type_kind: TypeKind::Enum,
-                name,
-                file_path,
-                line_number: line_num,
-            });
-        }
-    }
-
-    // Check for "fn "
-    if i + 2 < line.len() && &line[i..i+2] == b"fn" && line[i+2] == b' ' {
-        if let Some(name) = extract_identifier(&line[i+3..]) {
-            return Some(TypeDefinition {
-                type_kind: TypeKind::Function,
-                name,
-                file_path,
-                line_number: line_num,
-            });
-        }
-    }
-
-    None
-}
-
-// Extract identifier from bytes (no UTF-8 validation until we find one)
-fn extract_identifier(bytes: &[u8]) -> Option<String> {
-    // Skip leading whitespace
-    let mut start = 0;
-    while start < bytes.len() && (bytes[start] == b' ' || bytes[start] == b'\t') {
-        start += 1;
-    }
-
-    if start >= bytes.len() {
-        return None;
-    }
-
-    // Find end of identifier (until <, {, (, ;, or whitespace)
-    let mut end = start;
-    while end < bytes.len() {
-        let b = bytes[end];
-        if b == b'<' || b == b'{' || b == b'(' || b == b';' || b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
-            break;
-        }
-        end += 1;
-    }
-
-    if end == start {
-        return None;
-    }
-
-    // Now convert to string (only for the identifier portion)
-    let name_bytes = &bytes[start..end];
-    let name = String::from_utf8_lossy(name_bytes);
-
-    // Validate identifier
-    if is_valid_identifier(&name) {
-        Some(name.into_owned())
+    // Check for keywords
+    if line.len() >= i + 7 && &line[i..i+6] == b"struct" && line[i+6] == b' ' {
+        extract_identifier(&line[i+7..]).map(|name| TypeDefinition {
+            type_kind: TypeKind::Struct,
+            name,
+            file_path,
+            line_number: line_num,
+        })
+    } else if line.len() >= i + 5 && &line[i..i+4] == b"enum" && line[i+4] == b' ' {
+        extract_identifier(&line[i+5..]).map(|name| TypeDefinition {
+            type_kind: TypeKind::Enum,
+            name,
+            file_path,
+            line_number: line_num,
+        })
+    } else if line.len() >= i + 3 && &line[i..i+2] == b"fn" && line[i+2] == b' ' {
+        extract_identifier(&line[i+3..]).map(|name| TypeDefinition {
+            type_kind: TypeKind::Function,
+            name,
+            file_path,
+            line_number: line_num,
+        })
     } else {
         None
     }
 }
 
-fn is_valid_identifier(name: &str) -> bool {
-    !name.is_empty() 
-        && name.chars().next().unwrap_or('0').is_alphabetic() 
-        && name.chars().all(|c| c.is_alphanumeric() || c == '_')
-        && name.len() < 100 // Reasonable length limit
+// Extract identifier from bytes (no UTF-8 validation until we find one)
+#[inline]
+fn extract_identifier(bytes: &[u8]) -> Option<String> {
+    if bytes.is_empty() {
+        return None;
+    }
+
+    // Find end of identifier (until <, {, (, ;, or whitespace)
+    let end = bytes.iter().position(|&b| {
+        b == b'<' || b == b'{' || b == b'(' || b == b';' || b == b' ' || b == b'\t' || b == b'\n' || b == b'\r'
+    }).unwrap_or(bytes.len());
+
+    if end == 0 {
+        return None;
+    }
+
+    // Convert to string (only for the identifier portion)
+    let name_bytes = &bytes[..end];
+
+    // Quick validation: first char should be alphabetic or underscore
+    if !name_bytes[0].is_ascii_alphabetic() && name_bytes[0] != b'_' {
+        return None;
+    }
+
+    // Convert to string
+    Some(String::from_utf8_lossy(name_bytes).into_owned())
 }
 
 fn should_ignore(name: &str) -> bool {
