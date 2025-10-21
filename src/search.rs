@@ -122,7 +122,6 @@ impl SearchEngine {
                 RustAssetSearchMode::Struct(term) => term,
                 RustAssetSearchMode::Enum(term) => term,
                 RustAssetSearchMode::Function(term) => term,
-                RustAssetSearchMode::PubFunction(term) => term,
             };
             results.files_panes_results = self.search_rust_assets_only(actual_search_term, rust_assets, &rust_mode);
         } else {
@@ -216,8 +215,7 @@ impl SearchEngine {
             let type_matches = match mode {
                 RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Struct),
                 RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Enum),
-                RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Function | crate::files::TypeKind::PubFunction),
-                RustAssetSearchMode::PubFunction(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::PubFunction),
+                RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Function),
             };
 
             if type_matches {

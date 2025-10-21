@@ -98,8 +98,7 @@ impl UIRenderer {
                         match &rust_mode {
                             RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, TypeKind::Struct),
                             RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, TypeKind::Enum),
-                            RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, TypeKind::Function | TypeKind::PubFunction),
-                            RustAssetSearchMode::PubFunction(_) => matches!(rust_asset.type_kind, TypeKind::PubFunction),
+                            RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, TypeKind::Function),
                         }
                     } else {
                         false
@@ -148,7 +147,6 @@ impl UIRenderer {
                 RustAssetSearchMode::Struct(_) => "No matching structs found",
                 RustAssetSearchMode::Enum(_) => "No matching enums found",
                 RustAssetSearchMode::Function(_) => "No matching functions found",
-                RustAssetSearchMode::PubFunction(_) => "No matching public functions found",
             }
         } else {
             "No matching panes or files found"
@@ -224,7 +222,6 @@ impl UIRenderer {
                             TypeKind::Struct => "STRUCT",
                             TypeKind::Enum => "ENUM",
                             TypeKind::Function => "FN",
-                            TypeKind::PubFunction => "PUB FN",
                         };
                         (display_text, Some(&search_result.indices), item_type)
                     },

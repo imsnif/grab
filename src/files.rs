@@ -15,8 +15,7 @@ pub struct TypeDefinition {
 pub enum TypeKind {
     Struct,
     Enum,
-    Function,    // Any function (fn or pub fn)
-    PubFunction, // Public functions only (pub fn)
+    Function,
 }
 
 pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTreeMap<PathBuf, Vec<TypeDefinition>>> {
@@ -84,11 +83,13 @@ pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTree
         .filter(|file_path| file_path.extension().and_then(|ext| ext.to_str()) == Some("rs"))
         .collect();
     
+    eprintln!("before");
     for file_path in &rust_files {
         let rc_path = Rc::new((*file_path).clone());
         let definitions = scan_rust_file_fast(&rc_path).unwrap_or_default();
         result.insert((*file_path).clone(), definitions);
     }
+    eprintln!("after");
     
     // Add non-Rust files with empty definitions
     for file_path in files {
@@ -170,28 +171,28 @@ fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefin
 
 // Fast byte-level extraction of struct/enum/fn definitions
 fn extract_definition_fast(line: &[u8], file_path: Rc<PathBuf>, line_num: usize) -> Option<TypeDefinition> {
+    // Skip leading whitespace
     let mut i = 0;
-    let mut is_pub = false;
-
-    // Skip whitespace and check for "pub"
     while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
         i += 1;
     }
 
-    if i + 3 <= line.len() && &line[i..i+3] == b"pub" {
-        i += 3;
-        // Check if followed by whitespace or '(' for pub(crate), pub(super), etc.
-        if i < line.len() && (line[i] == b' ' || line[i] == b'\t' || line[i] == b'(') {
-            is_pub = true;
+    if i >= line.len() {
+        return None;
+    }
 
-            // Skip visibility modifier like (crate), (super), (in path)
+    // Check if line starts with "pub " or "pub(" and skip it
+    if i + 3 <= line.len() && &line[i..i+3] == b"pub" {
+        if i + 3 < line.len() && (line[i+3] == b' ' || line[i+3] == b'(') {
+            i += 3;
+
+            // Skip pub(crate), pub(super), etc.
             if i < line.len() && line[i] == b'(' {
-                // Find matching ')'
                 while i < line.len() && line[i] != b')' {
                     i += 1;
                 }
                 if i < line.len() {
-                    i += 1; // Skip the ')'
+                    i += 1; // Skip ')'
                 }
             }
 
@@ -199,15 +200,14 @@ fn extract_definition_fast(line: &[u8], file_path: Rc<PathBuf>, line_num: usize)
             while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
                 i += 1;
             }
-        } else {
-            i -= 3; // Not followed by whitespace or '(', revert
         }
     }
 
+    // Now check for struct/enum/fn at current position
+
     // Check for "struct "
-    if i + 7 <= line.len() && &line[i..i+6] == b"struct" && line[i+6] == b' ' {
-        i += 7;
-        if let Some(name) = extract_identifier(&line[i..]) {
+    if i + 6 < line.len() && &line[i..i+6] == b"struct" && line[i+6] == b' ' {
+        if let Some(name) = extract_identifier(&line[i+7..]) {
             return Some(TypeDefinition {
                 type_kind: TypeKind::Struct,
                 name,
@@ -218,9 +218,8 @@ fn extract_definition_fast(line: &[u8], file_path: Rc<PathBuf>, line_num: usize)
     }
 
     // Check for "enum "
-    if i + 5 <= line.len() && &line[i..i+4] == b"enum" && line[i+4] == b' ' {
-        i += 5;
-        if let Some(name) = extract_identifier(&line[i..]) {
+    if i + 4 < line.len() && &line[i..i+4] == b"enum" && line[i+4] == b' ' {
+        if let Some(name) = extract_identifier(&line[i+5..]) {
             return Some(TypeDefinition {
                 type_kind: TypeKind::Enum,
                 name,
@@ -231,16 +230,10 @@ fn extract_definition_fast(line: &[u8], file_path: Rc<PathBuf>, line_num: usize)
     }
 
     // Check for "fn "
-    if i + 3 <= line.len() && &line[i..i+2] == b"fn" && line[i+2] == b' ' {
-        i += 3;
-        if let Some(name) = extract_identifier(&line[i..]) {
-            let type_kind = if is_pub {
-                TypeKind::PubFunction
-            } else {
-                TypeKind::Function
-            };
+    if i + 2 < line.len() && &line[i..i+2] == b"fn" && line[i+2] == b' ' {
+        if let Some(name) = extract_identifier(&line[i+3..]) {
             return Some(TypeDefinition {
-                type_kind,
+                type_kind: TypeKind::Function,
                 name,
                 file_path,
                 line_number: line_num,
