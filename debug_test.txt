@@ -1,9 +1,0 @@
-pub enum Test1 {
-}
-
-pub  enum  Test2 {
-}
-
-pub
-enum Test3 {
-}
