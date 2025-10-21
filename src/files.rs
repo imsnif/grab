@@ -84,13 +84,11 @@ pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTree
         .filter(|file_path| file_path.extension().and_then(|ext| ext.to_str()) == Some("rs"))
         .collect();
     
-    eprintln!("before");
     for file_path in &rust_files {
         let rc_path = Rc::new((*file_path).clone());
         let definitions = scan_rust_file_fast(&rc_path).unwrap_or_default();
         result.insert((*file_path).clone(), definitions);
     }
-    eprintln!("after");
     
     // Add non-Rust files with empty definitions
     for file_path in files {
