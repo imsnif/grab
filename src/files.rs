@@ -84,13 +84,11 @@ pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTree
         .filter(|file_path| file_path.extension().and_then(|ext| ext.to_str()) == Some("rs"))
         .collect();
     
-    eprintln!("before, rust_files: {:#?}", rust_files);
     for file_path in &rust_files {
         let rc_path = Rc::new((*file_path).clone());
         let definitions = scan_rust_file_fast(&rc_path).unwrap_or_default();
         result.insert((*file_path).clone(), definitions);
     }
-    eprintln!("after");
     
     // Add non-Rust files with empty definitions
     for file_path in files {
@@ -102,7 +100,7 @@ pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTree
     Ok(result)
 }
 
-fn scan_rust_file_fast(file_path: &Rc<PathBuf>) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
+pub fn scan_rust_file_fast(file_path: &Rc<PathBuf>) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
     // Read file content as bytes first to avoid UTF-8 validation overhead
     let bytes = match fs::read(PathBuf::from("/host").join(file_path.as_ref())) {
         Ok(bytes) => bytes,
@@ -156,7 +154,7 @@ fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefin
             definitions.push(def);
 
             // Early exit if we have many definitions in this file
-            if definitions.len() > 50 {
+            if definitions.len() >= 300 {
                 break;
             }
         }
@@ -182,14 +180,27 @@ fn extract_definition_fast(line: &[u8], file_path: Rc<PathBuf>, line_num: usize)
 
     if i + 3 <= line.len() && &line[i..i+3] == b"pub" {
         i += 3;
-        if i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
+        // Check if followed by whitespace or '(' for pub(crate), pub(super), etc.
+        if i < line.len() && (line[i] == b' ' || line[i] == b'\t' || line[i] == b'(') {
             is_pub = true;
-            // Skip whitespace after pub
+
+            // Skip visibility modifier like (crate), (super), (in path)
+            if i < line.len() && line[i] == b'(' {
+                // Find matching ')'
+                while i < line.len() && line[i] != b')' {
+                    i += 1;
+                }
+                if i < line.len() {
+                    i += 1; // Skip the ')'
+                }
+            }
+
+            // Skip whitespace after pub or pub(...)
             while i < line.len() && (line[i] == b' ' || line[i] == b'\t') {
                 i += 1;
             }
         } else {
-            i -= 3; // Not followed by whitespace, revert
+            i -= 3; // Not followed by whitespace or '(', revert
         }
     }
 
