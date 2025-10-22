@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use crate::pane::PaneMetadata;
 use crate::files::{TypeDefinition, TypeKind};
-use crate::test_zellij::PaneId;
+use super::test_zellij::PaneId;
 
 /// Create sample panes for testing
 pub fn sample_panes() -> Vec<PaneMetadata> {

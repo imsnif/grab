@@ -1,0 +1,28 @@
+---
+source: src/unit/test_zellij.rs
+expression: frame.to_trimmed_string()
+---
+ Current Folder: /home/user/project (Ctrl f to change)
+ _
+
+ PANE  vim ~/project/src/main.rs
+ PANE  bash   <Enter>
+ PANE  nvim ~/project/Cargo.toml
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets

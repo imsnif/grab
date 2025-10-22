@@ -1,0 +1,28 @@
+---
+source: src/unit/test_zellij.rs
+expression: frame.to_trimmed_string()
+---
+ Current Folder: /home/user/project (Ctrl f to change)
+ cargo_
+
+ PANE  nvim ~/project/Cargo.toml   <Enter>
+ FILE  Cargo.toml
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets
