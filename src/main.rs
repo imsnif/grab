@@ -21,7 +21,6 @@ mod search;
 mod ui;
 mod pane;
 mod files;
-mod read_shell_histories;
 
 register_plugin!(State);
 
@@ -32,7 +31,6 @@ use crate::search::{SearchEngine, SearchItem};
 use crate::ui::UIRenderer;
 use crate::pane::extract_editor_pane_metadata;
 use crate::files::get_all_files;
-use crate::read_shell_histories::{DeduplicatedCommand, read_shell_histories};
 
 // Git repository detection functions
 fn is_current_directory_git_repository() -> bool {
@@ -137,7 +135,6 @@ impl ZellijPlugin for State {
             }
             Event::HostFolderChanged(new_host_folder) => {
                 if let Some(initial_cwd) = self.initial_cwd.take() {
-                    self.populate_shell_histories();
                     change_host_folder(initial_cwd);
                 } else if self.searching_for_git_repo {
                     // Continue git repository search
@@ -251,7 +248,6 @@ impl ZellijPlugin for State {
             self.search_state.get_term(),
             self.app_state.get_panes(),
             self.search_state.get_files_panes_results(),
-            &[], // No shell commands
             self.ui_state.selected_index,
             self.ui_state.scroll_offset,
             &displayed_files,
@@ -269,7 +265,6 @@ impl State {
             self.app_state.get_panes(),
             self.app_state.get_files(),
             &rust_assets,
-            self.app_state.get_shell_histories(),
             self.app_state.get_cwd(),
         );
 
@@ -340,12 +335,6 @@ impl State {
         let table_count = self.search_state.get_current_display_count();
 
         self.ui_state.adjust_selection_after_update(table_count);
-    }
-
-    fn populate_shell_histories(&mut self) {
-        let shell_histories = read_shell_histories();
-        let btree_histories: BTreeMap<String, Vec<DeduplicatedCommand>> = shell_histories.into_iter().collect();
-        self.app_state.update_shell_histories(btree_histories);
     }
 
     fn update_host_folder(&mut self, new_host_folder: Option<PathBuf>) {
@@ -1089,6 +1078,13 @@ mod tests {
         plugin.app_state.set_cwd(PathBuf::from("/home/user/project"));
         plugin.load(BTreeMap::new());
         plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
+
+        // Clear initial_cwd by triggering the first HostFolderChanged event
+        // This simulates the normal initialization flow
+        plugin.update(Event::HostFolderChanged(PathBuf::from("/home/user/project")));
+
+        // Disable git repo search since we're testing folder change behavior
+        plugin.searching_for_git_repo = false;
 
         // Render initial state to show original folder
         plugin.render(24, 80);

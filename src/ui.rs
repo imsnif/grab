@@ -20,7 +20,6 @@ impl UIRenderer {
         search_term: &str,
         panes: &[PaneMetadata],
         files_panes_results: &[SearchResult],
-        _shell_commands_results: &[SearchResult],
         selected_index: Option<usize>,
         scroll_offset: usize,
         _displayed_files: &[PathBuf],
@@ -140,7 +139,6 @@ impl UIRenderer {
             scroll_offset,
             available_title_width,
             total_items,
-            false, // is_shell_commands
             _current_cwd,
         );
     }
@@ -170,15 +168,10 @@ impl UIRenderer {
         scroll_offset: usize,
         available_title_width: usize,
         total_items: usize,
-        is_shell_commands: bool,
         _current_cwd: &PathBuf,
     ) {
         if results.is_empty() {
-            let empty_message = if is_shell_commands {
-                "No Commands"
-            } else {
-                "No Panes or Files"
-            };
+            let empty_message = "No Panes or Files";
             let empty_text = Text::new(empty_message).color_all(1);
             print_text_with_coordinates(empty_text, base_x, table_y + 1, None, None); // + 1 to
                                                                                       // account

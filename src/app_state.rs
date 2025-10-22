@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::collections::BTreeMap;
 use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
-use crate::read_shell_histories::DeduplicatedCommand;
 
 #[derive(Default)]
 pub struct AppState {
@@ -10,7 +9,6 @@ pub struct AppState {
     pub files: Vec<PathBuf>,
     pub rust_assets: BTreeMap<PathBuf, Vec<TypeDefinition>>,
     pub cwd: PathBuf,
-    pub shell_histories: BTreeMap<String, Vec<DeduplicatedCommand>>, // <shell -> deduplicated commands>
     pub user_selected_directory: bool, // Flag to track if directory was selected by user
 }
 
@@ -31,10 +29,6 @@ impl AppState {
         self.rust_assets = rust_assets;
     }
 
-    pub fn update_shell_histories(&mut self, shell_histories: BTreeMap<String, Vec<DeduplicatedCommand>>) {
-        self.shell_histories = shell_histories;
-    }
-
     pub fn set_cwd(&mut self, cwd: PathBuf) {
         self.cwd = cwd;
     }
@@ -53,10 +47,6 @@ impl AppState {
             all_assets.extend(definitions.clone());
         }
         all_assets
-    }
-
-    pub fn get_shell_histories(&self) -> &BTreeMap<String, Vec<DeduplicatedCommand>> {
-        &self.shell_histories
     }
 
     pub fn get_cwd(&self) -> &PathBuf {

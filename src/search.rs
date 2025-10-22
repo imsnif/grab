@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
-use crate::read_shell_histories::DeduplicatedCommand;
 use crate::{RustAssetSearchMode, parse_rust_asset_search};
 
 #[derive(Debug, Clone)]
@@ -104,7 +103,6 @@ impl SearchEngine {
         panes: &[PaneMetadata],
         files: &[PathBuf],
         rust_assets: &[TypeDefinition],
-        _shell_histories: &BTreeMap<String, Vec<DeduplicatedCommand>>,
         _current_cwd: &PathBuf,
     ) -> SearchResults {
         let mut results = SearchResults::default();
