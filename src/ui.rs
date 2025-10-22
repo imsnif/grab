@@ -1,4 +1,8 @@
+#[cfg(not(test))]
 use zellij_tile::prelude::*;
+#[cfg(test)]
+use crate::test_zellij::prelude::*;
+
 use std::path::PathBuf;
 use crate::search::{SearchResult, SearchItem};
 use crate::pane::PaneMetadata;

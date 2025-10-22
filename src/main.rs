@@ -521,11 +521,229 @@ mod tests {
 
     #[test]
     fn test_render_completes_without_panic() {
-        let mut state = setup();
-        state.load(BTreeMap::new());
+        test_zellij::mock_init();
+        test_zellij::mock_set_plugin_ids(PluginIds {
+            plugin_id: 42,
+            zellij_pid: 1234,
+            initial_cwd: PathBuf::from("/test/project"),
+        });
+        test_zellij::mock_init_frame(80, 24);
 
-        // Just verify render doesn't panic
-        state.render(40, 120);
-        // If we get here, rendering succeeded
+        let mut state = State::default();
+        state.load(BTreeMap::new());
+        state.update(Event::PermissionRequestResult(PermissionStatus::Granted));
+        state.render(24, 80);
+
+        // Assert against snapshot to verify rendering output
+        test_zellij::assert_frame_snapshot("render_default_state");
+    }
+
+    // Test helper methods for State
+    impl State {
+        /// Create state with sample panes for testing
+        pub fn with_sample_panes() -> Self {
+            let mut state = Self::default();
+
+            // Add sample panes
+            use crate::pane::PaneMetadata;
+            state.app_state.update_panes(vec![
+                PaneMetadata {
+                    id: PaneId::Terminal(1),
+                    title: "vim ~/project/src/main.rs".to_string(),
+                },
+                PaneMetadata {
+                    id: PaneId::Terminal(2),
+                    title: "bash".to_string(),
+                },
+                PaneMetadata {
+                    id: PaneId::Terminal(3),
+                    title: "nvim ~/project/Cargo.toml".to_string(),
+                },
+            ]);
+
+            state
+        }
+
+        /// Create state with sample files for testing
+        pub fn with_sample_files() -> Self {
+            let mut state = Self::default();
+
+            // Add sample files
+            let files = vec![
+                PathBuf::from("src/main.rs"),
+                PathBuf::from("src/ui.rs"),
+                PathBuf::from("src/search.rs"),
+                PathBuf::from("src/app_state.rs"),
+                PathBuf::from("Cargo.toml"),
+                PathBuf::from("README.md"),
+            ];
+
+            state.app_state.update_files(files);
+
+            state
+        }
+
+        /// Create state with sample Rust assets for testing
+        pub fn with_sample_rust_assets() -> Self {
+            use crate::files::{TypeDefinition, TypeKind};
+            use std::rc::Rc;
+
+            let mut state = Self::default();
+
+            let main_rs = Rc::new(PathBuf::from("src/main.rs"));
+            let ui_rs = Rc::new(PathBuf::from("src/ui.rs"));
+
+            let mut rust_assets = BTreeMap::new();
+            rust_assets.insert(
+                (*main_rs).clone(),
+                vec![
+                    TypeDefinition {
+                        type_kind: TypeKind::Struct,
+                        name: "State".to_string(),
+                        file_path: Rc::clone(&main_rs),
+                        line_number: 79,
+                    },
+                    TypeDefinition {
+                        type_kind: TypeKind::Function,
+                        name: "render".to_string(),
+                        file_path: Rc::clone(&main_rs),
+                        line_number: 230,
+                    },
+                ],
+            );
+            rust_assets.insert(
+                (*ui_rs).clone(),
+                vec![
+                    TypeDefinition {
+                        type_kind: TypeKind::Struct,
+                        name: "UIRenderer".to_string(),
+                        file_path: Rc::clone(&ui_rs),
+                        line_number: 10,
+                    },
+                ],
+            );
+
+            state.app_state.update_rust_assets(rust_assets);
+
+            state
+        }
+
+        /// Create comprehensive test state with all data types
+        pub fn with_all_sample_data() -> Self {
+            let mut state = Self::with_sample_panes();
+            let files_state = Self::with_sample_files();
+            let assets_state = Self::with_sample_rust_assets();
+
+            state.app_state.update_files(files_state.app_state.files);
+            state.app_state.update_rust_assets(assets_state.app_state.rust_assets);
+
+            state
+        }
+    }
+
+    #[test]
+    fn test_render_empty_state() {
+        // Setup
+        test_zellij::mock_init();
+        test_zellij::mock_set_plugin_ids(PluginIds {
+            plugin_id: 42,
+            zellij_pid: 1234,
+            initial_cwd: PathBuf::from("/home/user/project"),
+        });
+        test_zellij::mock_init_frame(80, 24);
+
+        let mut plugin = State::default();
+        plugin.load(BTreeMap::new());
+
+        // Simulate permission granted
+        plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
+
+        // Render with no search term
+        plugin.render(24, 80);
+
+        // Assert snapshot
+        test_zellij::assert_frame_snapshot("render_empty_state");
+    }
+
+    #[test]
+    fn test_render_with_sample_data() {
+        test_zellij::mock_init();
+        test_zellij::mock_set_plugin_ids(PluginIds {
+            plugin_id: 42,
+            zellij_pid: 1234,
+            initial_cwd: PathBuf::from("/home/user/project"),
+        });
+        test_zellij::mock_init_frame(80, 24);
+
+        let mut plugin = State::with_all_sample_data();
+        plugin.load(BTreeMap::new());
+        plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
+
+        plugin.render(24, 80);
+
+        test_zellij::assert_frame_snapshot("render_with_sample_data");
+    }
+
+    #[test]
+    fn test_render_with_search_term() {
+        test_zellij::mock_init();
+        test_zellij::mock_set_plugin_ids(PluginIds {
+            plugin_id: 42,
+            zellij_pid: 1234,
+            initial_cwd: PathBuf::from("/home/user/project"),
+        });
+        test_zellij::mock_init_frame(80, 24);
+
+        let mut plugin = State::with_all_sample_data();
+        plugin.load(BTreeMap::new());
+        plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
+
+        // Type search term "main"
+        plugin.update(Event::Key(Key {
+            bare_key: BareKey::Char('m'),
+            modifiers: vec![],
+        }));
+        plugin.update(Event::Key(Key {
+            bare_key: BareKey::Char('a'),
+            modifiers: vec![],
+        }));
+        plugin.update(Event::Key(Key {
+            bare_key: BareKey::Char('i'),
+            modifiers: vec![],
+        }));
+        plugin.update(Event::Key(Key {
+            bare_key: BareKey::Char('n'),
+            modifiers: vec![],
+        }));
+
+        // Render
+        plugin.render(24, 80);
+
+        test_zellij::assert_frame_snapshot("render_with_search_main");
+    }
+
+    #[test]
+    fn test_render_with_selection() {
+        test_zellij::mock_init();
+        test_zellij::mock_set_plugin_ids(PluginIds {
+            plugin_id: 42,
+            zellij_pid: 1234,
+            initial_cwd: PathBuf::from("/home/user/project"),
+        });
+        test_zellij::mock_init_frame(80, 24);
+
+        let mut plugin = State::with_sample_panes();
+        plugin.load(BTreeMap::new());
+        plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
+
+        // Press down to select first result
+        plugin.update(Event::Key(Key {
+            bare_key: BareKey::Down,
+            modifiers: vec![],
+        }));
+
+        plugin.render(24, 80);
+
+        test_zellij::assert_frame_snapshot("render_with_selection");
     }
 }

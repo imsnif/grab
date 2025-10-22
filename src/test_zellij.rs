@@ -19,6 +19,7 @@ struct MockState {
     calls: Vec<ZellijCall>,
     plugin_ids: PluginIds,
     rendered_output: Vec<RenderedOutput>,
+    current_frame: Option<Frame>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,6 +95,36 @@ where
     MOCK_STATE.with(|state| {
         state.borrow().calls.iter().filter(|c| predicate(c)).count()
     })
+}
+
+/// Initialize a new frame with given dimensions
+/// Should be called at the start of each test that checks rendering
+pub fn mock_init_frame(width: usize, height: usize) {
+    MOCK_STATE.with(|state| {
+        state.borrow_mut().current_frame = Some(Frame::new(width, height));
+    });
+}
+
+/// Get the current frame for assertions
+pub fn mock_get_frame() -> Option<Frame> {
+    MOCK_STATE.with(|state| state.borrow().current_frame.clone())
+}
+
+/// Clear the frame (reset to spaces)
+pub fn mock_clear_frame() {
+    MOCK_STATE.with(|state| {
+        if let Some(frame) = &mut state.borrow_mut().current_frame {
+            *frame = Frame::new(frame.width, frame.height);
+        }
+    });
+}
+
+/// Assert the current frame matches a snapshot
+/// Uses cargo-insta for snapshot testing
+#[cfg(test)]
+pub fn assert_frame_snapshot(snapshot_name: &str) {
+    let frame = mock_get_frame().expect("Frame not initialized - call mock_init_frame() first");
+    insta::assert_snapshot!(snapshot_name, frame.to_trimmed_string());
 }
 
 // =============================================================================
@@ -407,26 +438,215 @@ pub enum PipeSource {
     Keybind,
 }
 
+// =============================================================================
+// FRAME STRUCTURE FOR SNAPSHOT TESTING
+// =============================================================================
+
+/// Represents a 2D terminal frame for testing
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Frame {
+    /// 2D grid of characters (row-major: frame[y][x])
+    cells: Vec<Vec<char>>,
+    /// Height (rows)
+    height: usize,
+    /// Width (columns)
+    width: usize,
+}
+
+impl Frame {
+    /// Create new frame with given dimensions, filled with spaces
+    pub fn new(width: usize, height: usize) -> Self {
+        Self {
+            cells: vec![vec![' '; width]; height],
+            height,
+            width,
+        }
+    }
+
+    /// Write text at specific coordinates
+    /// Text that exceeds width is truncated
+    pub fn write_text(&mut self, text: &str, x: usize, y: usize) {
+        if y >= self.height {
+            return;
+        }
+
+        for (i, ch) in text.chars().enumerate() {
+            let current_x = x + i;
+            if current_x >= self.width {
+                break;
+            }
+            self.cells[y][current_x] = ch;
+        }
+    }
+
+    /// Write multi-line text starting at coordinates
+    pub fn write_lines(&mut self, lines: &[&str], x: usize, y: usize) {
+        for (line_offset, line) in lines.iter().enumerate() {
+            self.write_text(line, x, y + line_offset);
+        }
+    }
+
+    /// Convert frame to string representation (for snapshots)
+    pub fn to_string(&self) -> String {
+        self.cells
+            .iter()
+            .map(|row| row.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Trim trailing spaces from each line and trailing empty lines
+    /// This makes snapshots more readable and stable
+    pub fn to_trimmed_string(&self) -> String {
+        let lines: Vec<String> = self.cells
+            .iter()
+            .map(|row| row.iter().collect::<String>().trim_end().to_string())
+            .collect();
+
+        // Remove trailing empty lines
+        let mut last_non_empty = 0;
+        for (i, line) in lines.iter().enumerate() {
+            if !line.is_empty() {
+                last_non_empty = i;
+            }
+        }
+
+        lines[..=last_non_empty].join("\n")
+    }
+}
+
 // UI Components
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Text {
+    /// The actual text content
+    text: String,
+    /// Lines for rendering (derived from text)
     lines: Vec<String>,
+    /// Styling operations applied (tracked but not used in frame rendering)
+    #[allow(dead_code)]
+    styles: Vec<StyleOperation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StyleOperation {
+    ColorAll(usize),
+    ColorSubstring { color: usize, substring: String },
+    ColorIndices { color: usize, indices: Vec<usize> },
+    Selected,
 }
 
 impl Text {
     pub fn new(text: impl Into<String>) -> Self {
+        let text = text.into();
+        let lines = if text.is_empty() {
+            vec![String::new()]
+        } else {
+            text.split('\n').map(|s| s.to_string()).collect()
+        };
+
         Self {
-            lines: vec![text.into()],
+            text: text.clone(),
+            lines,
+            styles: Vec::new(),
         }
+    }
+
+    /// Get the plain text content (styling stripped)
+    pub fn get_text(&self) -> &str {
+        &self.text
+    }
+
+    /// Get lines for rendering
+    pub fn get_lines(&self) -> &[String] {
+        &self.lines
+    }
+
+    // Chainable styling methods (for API compatibility)
+
+    pub fn color_all(mut self, color_index: usize) -> Self {
+        self.styles.push(StyleOperation::ColorAll(color_index));
+        self
+    }
+
+    pub fn color_substring(mut self, color_index: usize, substring: impl Into<String>) -> Self {
+        self.styles.push(StyleOperation::ColorSubstring {
+            color: color_index,
+            substring: substring.into(),
+        });
+        self
+    }
+
+    pub fn color_indices(mut self, color_index: usize, indices: Vec<usize>) -> Self {
+        self.styles.push(StyleOperation::ColorIndices {
+            color: color_index,
+            indices,
+        });
+        self
+    }
+
+    pub fn selected(mut self) -> Self {
+        self.styles.push(StyleOperation::Selected);
+        self
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Table {}
+pub struct Table {
+    /// Rows in the table
+    rows: Vec<TableRow>,
+}
+
+#[derive(Debug, Clone)]
+enum TableRow {
+    Plain(Vec<String>),
+    Styled(Vec<Text>),
+}
 
 impl Table {
     pub fn new() -> Self {
-        Self {}
+        Self { rows: Vec::new() }
+    }
+
+    pub fn add_row(mut self, row: Vec<String>) -> Self {
+        self.rows.push(TableRow::Plain(row));
+        self
+    }
+
+    pub fn add_styled_row(mut self, row: Vec<Text>) -> Self {
+        self.rows.push(TableRow::Styled(row));
+        self
+    }
+
+    /// Get number of rows
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Convert table to plain text lines (styling stripped)
+    /// Each row is formatted as: "col1  col2  col3" with 2-space separation
+    pub fn to_text_lines(&self) -> Vec<String> {
+        self.rows
+            .iter()
+            .map(|row| match row {
+                TableRow::Plain(cells) => cells.join("  "),
+                TableRow::Styled(cells) => cells
+                    .iter()
+                    .map(|text| text.get_text())
+                    .collect::<Vec<_>>()
+                    .join("  "),
+            })
+            .collect()
+    }
+
+    /// Get individual row as text
+    pub fn get_row_text(&self, index: usize) -> Option<String> {
+        self.to_text_lines().get(index).cloned()
+    }
+}
+
+impl Default for Table {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -503,19 +723,36 @@ pub fn open_file_in_place_of_plugin(file: FileToOpen, close_plugin: bool, _posit
 }
 
 pub fn print_text_with_coordinates(text: Text, x: usize, y: usize, _width: Option<usize>, _height: Option<usize>) {
+    // Store in rendered_output for backward compatibility
     MOCK_STATE.with(|state| {
-        let text_string = text.lines.join("\n");
-        state.borrow_mut().rendered_output.push(RenderedOutput::Text {
-            text: text_string,
+        let mut state = state.borrow_mut();
+        state.rendered_output.push(RenderedOutput::Text {
+            text: text.get_text().to_string(),
             x,
             y,
         });
+
+        if let Some(frame) = &mut state.current_frame {
+            // Handle multi-line text
+            for (line_offset, line) in text.get_lines().iter().enumerate() {
+                frame.write_text(line, x, y + line_offset);
+            }
+        }
     });
 }
 
-pub fn print_table_with_coordinates(_table: Table, x: usize, y: usize, _width: Option<usize>, _height: Option<usize>) {
+pub fn print_table_with_coordinates(table: Table, x: usize, y: usize, _width: Option<usize>, _height: Option<usize>) {
+    // Store in rendered_output for backward compatibility
     MOCK_STATE.with(|state| {
-        state.borrow_mut().rendered_output.push(RenderedOutput::Table { x, y });
+        let mut state = state.borrow_mut();
+        state.rendered_output.push(RenderedOutput::Table { x, y });
+
+        if let Some(frame) = &mut state.current_frame {
+            let lines = table.to_text_lines();
+            for (line_offset, line) in lines.iter().enumerate() {
+                frame.write_text(line, x, y + line_offset);
+            }
+        }
     });
 }
 

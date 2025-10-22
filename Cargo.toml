@@ -9,3 +9,6 @@ zellij-tile = "0.43.1"
 fuzzy-matcher = "0.3.7"
 uuid = { version = "1.7.0", features = ["v4"] }
 memchr = "2.7"
+
+[dev-dependencies]
+insta = "1.34"
