@@ -1,11 +1,10 @@
 [package]
-name = "picker"
+name = "grab"
 version = "0.1.0"
 authors = ["Aram Drevekenin <aram@poor.dev>"]
 edition = "2018"
 
 [dependencies]
-#zellij-tile = { version = "0.43.0", path = "/home/aram/code/zellij/zellij-tile" }
 zellij-tile = "0.43.1"
 fuzzy-matcher = "0.3.7"
 uuid = { version = "1.7.0", features = ["v4"] }

@@ -844,6 +844,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grab"
+version = "0.1.0"
+dependencies = [
+ "fuzzy-matcher",
+ "memchr",
+ "uuid",
+ "zellij-tile",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1653,16 +1663,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1fb5f6f826b772a8d4c0394209441e7d37cbbb967ae9c7e0e8134365c9ee676"
 dependencies = [
  "siphasher 0.3.10",
-]
-
-[[package]]
-name = "picker"
-version = "0.1.0"
-dependencies = [
- "fuzzy-matcher",
- "memchr",
- "uuid",
- "zellij-tile",
 ]
 
 [[package]]
