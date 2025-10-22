@@ -1,7 +1,15 @@
+#[cfg(not(test))]
 use zellij_tile::prelude::*;
+#[cfg(test)]
+use crate::test_zellij::prelude::*;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use uuid::Uuid;
+
+// Mock Zellij for the tests
+#[cfg(test)]
+pub mod test_zellij;
 
 mod app_state;
 mod ui_state;
@@ -402,5 +410,122 @@ impl State {
                 .new_plugin_instance_should_replace_pane(PaneId::Plugin(get_plugin_ids().plugin_id))
                 .with_args(args),
         );
+    }
+}
+
+// ** NOTE: To run the tests, run "cargo test --target x86_64-unknown-linux-gnu" **
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::test_zellij;
+
+    fn setup() -> State {
+        test_zellij::mock_init();
+        test_zellij::mock_set_plugin_ids(PluginIds {
+            plugin_id: 42,
+            zellij_pid: 1234,
+            initial_cwd: PathBuf::from("/test/project"),
+        });
+        State::default()
+    }
+
+    #[test]
+    fn test_load_requests_permissions() {
+        let mut state = setup();
+        state.load(BTreeMap::new());
+
+        let calls = test_zellij::mock_get_calls();
+        assert!(calls.iter().any(|c| matches!(c, test_zellij::ZellijCall::RequestPermission(_))));
+    }
+
+    #[test]
+    fn test_permission_result_renames_pane() {
+        let mut state = setup();
+        state.load(BTreeMap::new());
+        test_zellij::mock_clear_calls();
+
+        state.update(Event::PermissionRequestResult(PermissionStatus::Granted));
+
+        let calls = test_zellij::mock_get_calls();
+        assert!(calls.iter().any(|c| matches!(
+            c,
+            test_zellij::ZellijCall::RenamePluginPane { id: 42, name }
+                if name == "Grab..."
+        )));
+    }
+
+    #[test]
+    fn test_down_key_triggers_render() {
+        let mut state = setup();
+        state.load(BTreeMap::new());
+
+        let should_render = state.update(Event::Key(Key {
+            bare_key: BareKey::Down,
+            modifiers: vec![],
+        }));
+
+        assert!(should_render);
+    }
+
+    #[test]
+    fn test_typing_triggers_render() {
+        let mut state = setup();
+        state.load(BTreeMap::new());
+
+        let should_render = state.update(Event::Key(Key {
+            bare_key: BareKey::Char('x'),
+            modifiers: vec![],
+        }));
+
+        assert!(should_render);
+    }
+
+    #[test]
+    fn test_ctrl_c_on_empty_search_closes_plugin() {
+        let mut state = setup();
+        state.load(BTreeMap::new());
+        test_zellij::mock_clear_calls();
+
+        state.update(Event::Key(Key {
+            bare_key: BareKey::Char('c'),
+            modifiers: vec![KeyModifier::Ctrl],
+        }));
+
+        let calls = test_zellij::mock_get_calls();
+        assert!(calls.iter().any(|c| matches!(c, test_zellij::ZellijCall::CloseSelf)));
+    }
+
+    #[test]
+    fn test_ctrl_c_with_text_does_not_close() {
+        let mut state = setup();
+        state.load(BTreeMap::new());
+
+        // Type something
+        state.update(Event::Key(Key {
+            bare_key: BareKey::Char('x'),
+            modifiers: vec![],
+        }));
+
+        test_zellij::mock_clear_calls();
+
+        state.update(Event::Key(Key {
+            bare_key: BareKey::Char('c'),
+            modifiers: vec![KeyModifier::Ctrl],
+        }));
+
+        let calls = test_zellij::mock_get_calls();
+        assert!(!calls.iter().any(|c| matches!(c, test_zellij::ZellijCall::CloseSelf)));
+    }
+
+    #[test]
+    fn test_render_completes_without_panic() {
+        let mut state = setup();
+        state.load(BTreeMap::new());
+
+        // Just verify render doesn't panic
+        state.render(40, 120);
+        // If we get here, rendering succeeded
     }
 }
