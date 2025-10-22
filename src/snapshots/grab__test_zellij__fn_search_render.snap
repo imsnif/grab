@@ -1,0 +1,28 @@
+---
+source: src/test_zellij.rs
+expression: frame.to_trimmed_string()
+---
+ Current Folder: /home/user/project (Ctrl f to change)
+ fn render_
+
+ FN  render (src/main.rs)   <Enter>
+ FN  render_ui (src/main.rs)
+ FN  render_table (src/ui.rs)
+ FN  render_text (src/ui.rs)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets

@@ -1,0 +1,28 @@
+---
+source: src/test_zellij.rs
+expression: frame.to_trimmed_string()
+---
+ Current Folder: /home/user/project (Ctrl f to change)
+ struct mystruct_
+
+ STRUCT  MyStruct (src/types.rs)   <Enter>
+ STRUCT  MyStructHelper (src/types.rs)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets

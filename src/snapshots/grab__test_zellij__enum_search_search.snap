@@ -1,0 +1,28 @@
+---
+source: src/test_zellij.rs
+expression: frame.to_trimmed_string()
+---
+ Current Folder: /home/user/project (Ctrl f to change)
+ enum search_
+
+ ENUM  SearchItem (src/search.rs)   <Enter>
+ ENUM  SearchMode (src/types.rs)
+ ENUM  SearchType (src/types.rs)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets
