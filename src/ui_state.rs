@@ -6,10 +6,6 @@ pub struct UIState {
 }
 
 impl UIState {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn set_selected_index(&mut self, index: Option<usize>) {
         self.selected_index = index;
     }

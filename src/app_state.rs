@@ -13,10 +13,6 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn update_panes(&mut self, panes: Vec<PaneMetadata>) {
         self.pane_metadata = panes;
     }
@@ -51,14 +47,6 @@ impl AppState {
 
     pub fn get_cwd(&self) -> &PathBuf {
         &self.cwd
-    }
-
-    pub fn pane_count(&self) -> usize {
-        self.pane_metadata.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.pane_metadata.is_empty()
     }
 
     pub fn set_user_selected_directory(&mut self, user_selected: bool) {

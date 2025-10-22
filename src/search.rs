@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::collections::BTreeMap;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
@@ -59,14 +58,17 @@ impl SearchResult {
         }
     }
 
+    #[cfg(test)]
     pub fn is_pane(&self) -> bool {
         matches!(self.item, SearchItem::Pane(_))
     }
 
+    #[cfg(test)]
     pub fn is_file(&self) -> bool {
         matches!(self.item, SearchItem::File(_))
     }
 
+    #[cfg(test)]
     pub fn is_rust_asset(&self) -> bool {
         matches!(self.item, SearchItem::RustAsset(_))
     }
