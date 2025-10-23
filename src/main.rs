@@ -92,7 +92,6 @@ impl ZellijPlugin for State {
             PermissionType::OpenFiles,
             PermissionType::FullHdAccess,
             PermissionType::MessageAndLaunchOtherPlugins,
-            PermissionType::RunCommands,
         ]);
         subscribe(&[
             EventType::PaneUpdate,
