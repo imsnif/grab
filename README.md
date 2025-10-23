@@ -1,3 +1,6 @@
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/a5e65fd8-fff1-4e6e-82e8-934fec7c47a3" alt="preview">
+</div>
 
 ## About
 This [Zellij][zellij] plugin is a fuzzy finder tailored for Rust developers.
