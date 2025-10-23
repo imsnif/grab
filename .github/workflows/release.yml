@@ -3,11 +3,14 @@ name: Release Build
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 jobs:
   build:
     name: Build release binary
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -19,14 +22,9 @@ jobs:
           targets: wasm32-wasip1
 
       - name: Build release binary
-        run: cargo build --release
+        run: cargo build --release --target wasm32-wasip1
 
       - name: Upload binary to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./target/wasm32-wasip1/release/grab.wasm
-          asset_name: grab.wasm
-          asset_content_type: application/wasm
+          files: ./target/wasm32-wasip1/release/grab.wasm
