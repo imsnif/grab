@@ -1,27 +1,28 @@
+
 ## About
+This [Zellij][zellij] plugin is a fuzzy finder tailored for Rust developers.
 
-This is an example [Zellij][zellij] plugin in Rust. It can be used as a template to start developing your own plugins.
+When opened inside a `git` folder, it searches through files in the project, as well as editor panes already opened to those files (prioritizing the latter). Pressing `Enter` or `Tab` will replace `Grab` with an `$EDITOR` pane opened to this file.
 
-More about Zellij plugins: [Zellij Documentation][docs]
+If a search term begins with `struct`, `enum` or `fn` followed by space, `Grab` will fuzzy find these Rust entities in the project instead of files. When selected with `Enter` or `Tab`, it will be replaced with an `$EDITOR` pane opened to the relevant file (and the relevant line!)
 
 [zellij]: https://github.com/zellij-org/zellij
-[docs]: https://zellij.dev/documentation/plugins.html
 
-## Development
+## Recommended Usage
+Grab works best when bound to a certain key (for example `Alt 0`) and then used as necessary instead of opening a new pane with `Alt n`.
 
-*Note*: you will need to have `wasm32-wasi` added to rust as a target to build the plugin. This can be done with `rustup target add wasm32-wasi`.
+### Example
 
-### With the Provided Layout
+```kdl
+shared_except "locked" {
+    bind "Alt 0" {
+        LaunchPlugin "file:/home/aram/.config/zellij/plugins/grab.wasm"
+    }
+}
+```
 
-![img-2024-11-14-100111](https://github.com/user-attachments/assets/e3bae15c-1f94-4d4a-acea-a036f8afdf67)
+## Installation
 
-
-Run `zellij -l zellij.kdl` at the root of this repository. This will open a development environment that will help you develop the plugin inside Zellij.
-
-It can also be used if you prefer developing outside of the terminal - in this case you should ignore the `$EDITOR` pane and use your IDE instead.
-
-### Otherwise
-
-1. Build the project: `cargo build`
-2. Load it inside a running Zellij session: `zellij action start-or-reload-plugin file:target/wasm32-wasi/debug/rust-plugin-example.wasm`
-3. Repeat on changes (perhaps with a `watchexec` or similar command to run on fs changes).
+1. Download `grab.wasm` from the latest release
+2. Place it in `~/.config/zellij/plugins`
+3. Bind a key to launch it (see example above)

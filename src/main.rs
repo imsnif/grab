@@ -393,7 +393,7 @@ impl State {
                 .with_plugin_url("filepicker")
                 .with_plugin_config(config)
                 .new_plugin_instance_should_have_pane_title(
-                    "Select base folder for the picker...",
+                    "Git folder not found, please select a base folder for the picker...",
                 )
                 .new_plugin_instance_should_replace_pane(PaneId::Plugin(get_plugin_ids().plugin_id))
                 .with_args(args),
