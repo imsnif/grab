@@ -42,7 +42,6 @@ impl ZellijPlugin for State {
                 self.app_state.update_rust_assets(files_and_rust_assets);
             }
         }
-        println!("load");
         self.update_search_results();
     }
 

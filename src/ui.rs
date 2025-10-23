@@ -68,7 +68,6 @@ impl UIRenderer {
             cwd,
         );
 
-        // Render hint line at the bottom
         let hint_y = rows.saturating_sub(1);
         let hint_text = "Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets";
         let max_hint_width = cols.saturating_sub(2);
@@ -175,7 +174,7 @@ impl UIRenderer {
             let empty_text = Text::new(empty_message).color_all(1);
             print_text_with_coordinates(empty_text, base_x, table_y + 1, None, None); // + 1 to
                                                                                       // account
-                                                                                      // fot the
+                                                                                      // for the
                                                                                       // table
                                                                                       // title
             return;

@@ -28,14 +28,12 @@ use crate::ui::UIRenderer;
 use crate::pane::extract_editor_pane_metadata;
 use crate::files::get_all_files;
 
-// Git repository detection functions
 fn is_current_directory_git_repository() -> bool {
     // Check if the current host folder has a .git directory or file
     let git_dir = PathBuf::from("/host/.git");
     git_dir.exists() && (git_dir.is_dir() || git_dir.is_file())
 }
 
-// Rust asset search detection
 #[derive(Debug, Clone)]
 pub enum RustAssetSearchMode {
     Struct(String),    // Search term after "struct"
@@ -115,7 +113,6 @@ impl ZellijPlugin for State {
                 let own_plugin_id = get_plugin_ids().plugin_id;
                 rename_plugin_pane(own_plugin_id, "Grab...");
                 
-                // Start searching for git repository from initial directory
                 self.searching_for_git_repo = true;
                 self.start_git_repository_search();
             }
@@ -133,7 +130,6 @@ impl ZellijPlugin for State {
                 if let Some(initial_cwd) = self.initial_cwd.take() {
                     change_host_folder(initial_cwd);
                 } else if self.searching_for_git_repo {
-                    // Continue git repository search
                     self.continue_git_repository_search(new_host_folder);
                 } else {
                     let user_selected = self.app_state.is_user_selected_directory();
