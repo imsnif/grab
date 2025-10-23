@@ -27,12 +27,27 @@ pub enum ZellijCall {
     RequestPermission(Vec<PermissionType>),
     Subscribe(Vec<EventType>),
     GetPluginIds,
-    RenamePluginPane { id: u32, name: String },
+    RenamePluginPane {
+        id: u32,
+        name: String,
+    },
     CloseSelf,
-    PipeMessageToPlugin { plugin_url: String, args: BTreeMap<String, String> },
-    ChangeHostFolder { path: PathBuf },
-    ReplacePaneWithExistingPane { plugin_pane: PaneId, target_pane: PaneId },
-    OpenFileInPlaceOfPlugin { path: PathBuf, line_number: Option<usize>, close_plugin: bool },
+    PipeMessageToPlugin {
+        plugin_url: String,
+        args: BTreeMap<String, String>,
+    },
+    ChangeHostFolder {
+        path: PathBuf,
+    },
+    ReplacePaneWithExistingPane {
+        plugin_pane: PaneId,
+        target_pane: PaneId,
+    },
+    OpenFileInPlaceOfPlugin {
+        path: PathBuf,
+        line_number: Option<usize>,
+        close_plugin: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -61,9 +76,7 @@ pub fn mock_set_plugin_ids(plugin_ids: PluginIds) {
 
 /// Get all recorded calls
 pub fn mock_get_calls() -> Vec<ZellijCall> {
-    MOCK_STATE.with(|state| {
-        state.borrow().calls.clone()
-    })
+    MOCK_STATE.with(|state| state.borrow().calls.clone())
 }
 
 /// Clear all recorded calls
@@ -75,9 +88,7 @@ pub fn mock_clear_calls() {
 
 /// Get all rendered output
 pub fn mock_get_rendered_output() -> Vec<RenderedOutput> {
-    MOCK_STATE.with(|state| {
-        state.borrow().rendered_output.clone()
-    })
+    MOCK_STATE.with(|state| state.borrow().rendered_output.clone())
 }
 
 /// Clear rendered output
@@ -90,11 +101,9 @@ pub fn mock_clear_rendered_output() {
 /// Count calls matching a predicate
 pub fn mock_count_calls<F>(predicate: F) -> usize
 where
-    F: Fn(&ZellijCall) -> bool
+    F: Fn(&ZellijCall) -> bool,
 {
-    MOCK_STATE.with(|state| {
-        state.borrow().calls.iter().filter(|c| predicate(c)).count()
-    })
+    MOCK_STATE.with(|state| state.borrow().calls.iter().filter(|c| predicate(c)).count())
 }
 
 /// Initialize a new frame with given dimensions
@@ -398,25 +407,31 @@ impl MessageToPlugin {
     }
 
     pub fn new_plugin_instance_should_have_pane_title(mut self, title: impl Into<String>) -> Self {
-        let args = self.message_to_plugin.new_plugin_args.get_or_insert_with(|| NewPluginArgs {
-            should_float: None,
-            pane_id_to_replace: None,
-            pane_title: None,
-            cwd: None,
-            skip_cache: false,
-        });
+        let args = self
+            .message_to_plugin
+            .new_plugin_args
+            .get_or_insert_with(|| NewPluginArgs {
+                should_float: None,
+                pane_id_to_replace: None,
+                pane_title: None,
+                cwd: None,
+                skip_cache: false,
+            });
         args.pane_title = Some(title.into());
         self
     }
 
     pub fn new_plugin_instance_should_replace_pane(mut self, pane_id: PaneId) -> Self {
-        let args = self.message_to_plugin.new_plugin_args.get_or_insert_with(|| NewPluginArgs {
-            should_float: None,
-            pane_id_to_replace: None,
-            pane_title: None,
-            cwd: None,
-            skip_cache: false,
-        });
+        let args = self
+            .message_to_plugin
+            .new_plugin_args
+            .get_or_insert_with(|| NewPluginArgs {
+                should_float: None,
+                pane_id_to_replace: None,
+                pane_title: None,
+                cwd: None,
+                skip_cache: false,
+            });
         args.pane_id_to_replace = Some(pane_id);
         self
     }
@@ -498,7 +513,8 @@ impl Frame {
     /// Trim trailing spaces from each line and trailing empty lines
     /// This makes snapshots more readable and stable
     pub fn to_trimmed_string(&self) -> String {
-        let lines: Vec<String> = self.cells
+        let lines: Vec<String> = self
+            .cells
             .iter()
             .map(|row| row.iter().collect::<String>().trim_end().to_string())
             .collect();
@@ -656,13 +672,19 @@ impl Default for Table {
 
 pub fn request_permission(permissions: &[PermissionType]) {
     MOCK_STATE.with(|state| {
-        state.borrow_mut().calls.push(ZellijCall::RequestPermission(permissions.to_vec()));
+        state
+            .borrow_mut()
+            .calls
+            .push(ZellijCall::RequestPermission(permissions.to_vec()));
     });
 }
 
 pub fn subscribe(events: &[EventType]) {
     MOCK_STATE.with(|state| {
-        state.borrow_mut().calls.push(ZellijCall::Subscribe(events.to_vec()));
+        state
+            .borrow_mut()
+            .calls
+            .push(ZellijCall::Subscribe(events.to_vec()));
     });
 }
 
@@ -690,39 +712,65 @@ pub fn close_self() {
 
 pub fn pipe_message_to_plugin(message: MessageToPlugin) {
     MOCK_STATE.with(|state| {
-        state.borrow_mut().calls.push(ZellijCall::PipeMessageToPlugin {
-            plugin_url: message.message_to_plugin.plugin_url.clone().unwrap_or_default(),
-            args: message.message_to_plugin.message_args.clone(),
-        });
+        state
+            .borrow_mut()
+            .calls
+            .push(ZellijCall::PipeMessageToPlugin {
+                plugin_url: message
+                    .message_to_plugin
+                    .plugin_url
+                    .clone()
+                    .unwrap_or_default(),
+                args: message.message_to_plugin.message_args.clone(),
+            });
     });
 }
 
 pub fn change_host_folder(path: PathBuf) {
     MOCK_STATE.with(|state| {
-        state.borrow_mut().calls.push(ZellijCall::ChangeHostFolder { path });
+        state
+            .borrow_mut()
+            .calls
+            .push(ZellijCall::ChangeHostFolder { path });
     });
 }
 
 pub fn replace_pane_with_existing_pane(plugin_pane: PaneId, target_pane: PaneId) {
     MOCK_STATE.with(|state| {
-        state.borrow_mut().calls.push(ZellijCall::ReplacePaneWithExistingPane {
-            plugin_pane,
-            target_pane,
-        });
+        state
+            .borrow_mut()
+            .calls
+            .push(ZellijCall::ReplacePaneWithExistingPane {
+                plugin_pane,
+                target_pane,
+            });
     });
 }
 
-pub fn open_file_in_place_of_plugin(file: FileToOpen, close_plugin: bool, _position: FloatingPaneCoordinates) {
+pub fn open_file_in_place_of_plugin(
+    file: FileToOpen,
+    close_plugin: bool,
+    _position: FloatingPaneCoordinates,
+) {
     MOCK_STATE.with(|state| {
-        state.borrow_mut().calls.push(ZellijCall::OpenFileInPlaceOfPlugin {
-            path: file.path,
-            line_number: file.line_number,
-            close_plugin,
-        });
+        state
+            .borrow_mut()
+            .calls
+            .push(ZellijCall::OpenFileInPlaceOfPlugin {
+                path: file.path,
+                line_number: file.line_number,
+                close_plugin,
+            });
     });
 }
 
-pub fn print_text_with_coordinates(text: Text, x: usize, y: usize, _width: Option<usize>, _height: Option<usize>) {
+pub fn print_text_with_coordinates(
+    text: Text,
+    x: usize,
+    y: usize,
+    _width: Option<usize>,
+    _height: Option<usize>,
+) {
     // Store in rendered_output for backward compatibility
     MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();
@@ -741,7 +789,13 @@ pub fn print_text_with_coordinates(text: Text, x: usize, y: usize, _width: Optio
     });
 }
 
-pub fn print_table_with_coordinates(table: Table, x: usize, y: usize, _width: Option<usize>, _height: Option<usize>) {
+pub fn print_table_with_coordinates(
+    table: Table,
+    x: usize,
+    y: usize,
+    _width: Option<usize>,
+    _height: Option<usize>,
+) {
     // Store in rendered_output for backward compatibility
     MOCK_STATE.with(|state| {
         let mut state = state.borrow_mut();

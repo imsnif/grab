@@ -1,8 +1,11 @@
+use crate::unit::{fixtures, test_zellij};
 use crate::State;
-use crate::unit::{test_zellij, fixtures};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use test_zellij::{PluginIds, Event, PermissionStatus, Key, BareKey, KeyModifier, PaneId, PipeMessage, ZellijPlugin};
+use test_zellij::{
+    BareKey, Event, Key, KeyModifier, PaneId, PermissionStatus, PipeMessage, PluginIds,
+    ZellijPlugin,
+};
 
 fn setup() -> State {
     test_zellij::mock_init();
@@ -20,7 +23,9 @@ fn test_load_requests_permissions() {
     state.load(BTreeMap::new());
 
     let calls = test_zellij::mock_get_calls();
-    assert!(calls.iter().any(|c| matches!(c, test_zellij::ZellijCall::RequestPermission(_))));
+    assert!(calls
+        .iter()
+        .any(|c| matches!(c, test_zellij::ZellijCall::RequestPermission(_))));
 }
 
 #[test]
@@ -77,7 +82,9 @@ fn test_ctrl_c_on_empty_search_closes_plugin() {
     }));
 
     let calls = test_zellij::mock_get_calls();
-    assert!(calls.iter().any(|c| matches!(c, test_zellij::ZellijCall::CloseSelf)));
+    assert!(calls
+        .iter()
+        .any(|c| matches!(c, test_zellij::ZellijCall::CloseSelf)));
 }
 
 #[test]
@@ -99,7 +106,9 @@ fn test_ctrl_c_with_text_does_not_close() {
     }));
 
     let calls = test_zellij::mock_get_calls();
-    assert!(!calls.iter().any(|c| matches!(c, test_zellij::ZellijCall::CloseSelf)));
+    assert!(!calls
+        .iter()
+        .any(|c| matches!(c, test_zellij::ZellijCall::CloseSelf)));
 }
 
 #[test]
@@ -158,7 +167,9 @@ fn test_render_with_sample_data() {
     let mut plugin = State::default();
     plugin.app_state.update_panes(fixtures::sample_panes());
     plugin.app_state.update_files(fixtures::sample_files());
-    plugin.app_state.update_rust_assets(fixtures::sample_rust_assets());
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::sample_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -181,7 +192,9 @@ fn test_render_with_search_term() {
     let mut plugin = State::default();
     plugin.app_state.update_panes(fixtures::sample_panes());
     plugin.app_state.update_files(fixtures::sample_files());
-    plugin.app_state.update_rust_assets(fixtures::sample_rust_assets());
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::sample_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -251,7 +264,9 @@ fn test_typing_string_searches_and_displays_results() {
     let mut plugin = State::default();
     plugin.app_state.update_panes(fixtures::sample_panes());
     plugin.app_state.update_files(fixtures::sample_files());
-    plugin.app_state.update_rust_assets(fixtures::sample_rust_assets());
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::sample_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -268,12 +283,15 @@ fn test_typing_string_searches_and_displays_results() {
 
     // Verify search results were updated
     let results = plugin.search_state.get_current_display_results();
-    assert!(!results.is_empty(), "Should have search results for 'cargo'");
+    assert!(
+        !results.is_empty(),
+        "Should have search results for 'cargo'"
+    );
 
     // Check that Cargo.toml is in the results
-    let has_cargo_toml = results.iter().any(|r| {
-        r.display_text().contains("Cargo.toml")
-    });
+    let has_cargo_toml = results
+        .iter()
+        .any(|r| r.display_text().contains("Cargo.toml"));
     assert!(has_cargo_toml, "Cargo.toml should be in search results");
 
     // Render and verify output
@@ -323,12 +341,18 @@ fn test_enter_on_pane_opens_pane() {
     // Verify that replace_pane_with_existing_pane was called
     let calls = test_zellij::mock_get_calls();
     let replaced = calls.iter().any(|c| {
-        matches!(c, test_zellij::ZellijCall::ReplacePaneWithExistingPane {
-            plugin_pane: PaneId::Plugin(42),
-            target_pane: PaneId::Terminal(1)
-        })
+        matches!(
+            c,
+            test_zellij::ZellijCall::ReplacePaneWithExistingPane {
+                plugin_pane: PaneId::Plugin(42),
+                target_pane: PaneId::Terminal(1)
+            }
+        )
     });
-    assert!(replaced, "Should call replace_pane_with_existing_pane for pane");
+    assert!(
+        replaced,
+        "Should call replace_pane_with_existing_pane for pane"
+    );
 }
 
 #[test]
@@ -342,7 +366,9 @@ fn test_enter_on_file_opens_file() {
     });
 
     let mut plugin = State::default();
-    plugin.app_state.set_cwd(PathBuf::from("/home/user/project"));
+    plugin
+        .app_state
+        .set_cwd(PathBuf::from("/home/user/project"));
     plugin.app_state.update_files(fixtures::sample_files());
 
     plugin.load(BTreeMap::new());
@@ -358,7 +384,10 @@ fn test_enter_on_file_opens_file() {
 
     // Verify we have results
     let results = plugin.search_state.get_current_display_results();
-    assert!(!results.is_empty(), "Should have search results for 'README'");
+    assert!(
+        !results.is_empty(),
+        "Should have search results for 'README'"
+    );
 
     // Result should be a file
     assert!(results[0].is_file(), "Result should be a file");
@@ -397,8 +426,12 @@ fn test_struct_search_and_enter_opens_file_at_line() {
     test_zellij::mock_init_frame(80, 24);
 
     let mut plugin = State::default();
-    plugin.app_state.set_cwd(PathBuf::from("/home/user/project"));
-    plugin.app_state.update_rust_assets(fixtures::struct_search_rust_assets());
+    plugin
+        .app_state
+        .set_cwd(PathBuf::from("/home/user/project"));
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::struct_search_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -413,18 +446,25 @@ fn test_struct_search_and_enter_opens_file_at_line() {
 
     // Verify we have results and they're rust assets
     let results = plugin.search_state.get_current_display_results();
-    assert!(!results.is_empty(), "Should have search results for 'struct mystruct'");
+    assert!(
+        !results.is_empty(),
+        "Should have search results for 'struct mystruct'"
+    );
 
     // All results should only be structs (not functions)
     for result in &results {
         assert!(result.is_rust_asset(), "All results should be rust assets");
         if let crate::search::SearchItem::RustAsset(asset) = &result.item {
-            assert!(matches!(asset.type_kind, TypeKind::Struct), "Should only show structs");
+            assert!(
+                matches!(asset.type_kind, TypeKind::Struct),
+                "Should only show structs"
+            );
         }
     }
 
     // Should fuzzy match MyStruct and MyStructHelper
-    let result_names: Vec<String> = results.iter()
+    let result_names: Vec<String> = results
+        .iter()
         .filter_map(|r| {
             if let crate::search::SearchItem::RustAsset(asset) = &r.item {
                 Some(asset.name.clone())
@@ -433,8 +473,14 @@ fn test_struct_search_and_enter_opens_file_at_line() {
             }
         })
         .collect();
-    assert!(result_names.contains(&"MyStruct".to_string()), "Should find MyStruct");
-    assert!(result_names.contains(&"MyStructHelper".to_string()), "Should find MyStructHelper");
+    assert!(
+        result_names.contains(&"MyStruct".to_string()),
+        "Should find MyStruct"
+    );
+    assert!(
+        result_names.contains(&"MyStructHelper".to_string()),
+        "Should find MyStructHelper"
+    );
 
     // Render and verify output
     plugin.render(24, 80);
@@ -451,13 +497,19 @@ fn test_struct_search_and_enter_opens_file_at_line() {
     // Verify that open_file_in_place_of_plugin was called with line number
     let calls = test_zellij::mock_get_calls();
     let opened = calls.iter().any(|c| {
-        matches!(c, test_zellij::ZellijCall::OpenFileInPlaceOfPlugin {
-            path: _,
-            line_number: Some(_),
-            close_plugin: true
-        })
+        matches!(
+            c,
+            test_zellij::ZellijCall::OpenFileInPlaceOfPlugin {
+                path: _,
+                line_number: Some(_),
+                close_plugin: true
+            }
+        )
     });
-    assert!(opened, "Should call open_file_in_place_of_plugin with line number");
+    assert!(
+        opened,
+        "Should call open_file_in_place_of_plugin with line number"
+    );
 }
 
 #[test]
@@ -474,8 +526,12 @@ fn test_enum_search_and_enter_opens_file_at_line() {
     test_zellij::mock_init_frame(80, 24);
 
     let mut plugin = State::default();
-    plugin.app_state.set_cwd(PathBuf::from("/home/user/project"));
-    plugin.app_state.update_rust_assets(fixtures::enum_search_rust_assets());
+    plugin
+        .app_state
+        .set_cwd(PathBuf::from("/home/user/project"));
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::enum_search_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -490,18 +546,25 @@ fn test_enum_search_and_enter_opens_file_at_line() {
 
     // Verify we have results and they're rust assets
     let results = plugin.search_state.get_current_display_results();
-    assert!(!results.is_empty(), "Should have search results for 'enum search'");
+    assert!(
+        !results.is_empty(),
+        "Should have search results for 'enum search'"
+    );
 
     // All results should only be enums (not structs)
     for result in &results {
         assert!(result.is_rust_asset(), "All results should be rust assets");
         if let crate::search::SearchItem::RustAsset(asset) = &result.item {
-            assert!(matches!(asset.type_kind, TypeKind::Enum), "Should only show enums");
+            assert!(
+                matches!(asset.type_kind, TypeKind::Enum),
+                "Should only show enums"
+            );
         }
     }
 
     // Should fuzzy match SearchMode, SearchType, and SearchItem
-    let result_names: Vec<String> = results.iter()
+    let result_names: Vec<String> = results
+        .iter()
         .filter_map(|r| {
             if let crate::search::SearchItem::RustAsset(asset) = &r.item {
                 Some(asset.name.clone())
@@ -510,9 +573,18 @@ fn test_enum_search_and_enter_opens_file_at_line() {
             }
         })
         .collect();
-    assert!(result_names.contains(&"SearchMode".to_string()), "Should find SearchMode");
-    assert!(result_names.contains(&"SearchType".to_string()), "Should find SearchType");
-    assert!(result_names.contains(&"SearchItem".to_string()), "Should find SearchItem");
+    assert!(
+        result_names.contains(&"SearchMode".to_string()),
+        "Should find SearchMode"
+    );
+    assert!(
+        result_names.contains(&"SearchType".to_string()),
+        "Should find SearchType"
+    );
+    assert!(
+        result_names.contains(&"SearchItem".to_string()),
+        "Should find SearchItem"
+    );
 
     // Render and verify output
     plugin.render(24, 80);
@@ -529,13 +601,19 @@ fn test_enum_search_and_enter_opens_file_at_line() {
     // Verify that open_file_in_place_of_plugin was called with line number
     let calls = test_zellij::mock_get_calls();
     let opened = calls.iter().any(|c| {
-        matches!(c, test_zellij::ZellijCall::OpenFileInPlaceOfPlugin {
-            path: _,
-            line_number: Some(_),
-            close_plugin: true
-        })
+        matches!(
+            c,
+            test_zellij::ZellijCall::OpenFileInPlaceOfPlugin {
+                path: _,
+                line_number: Some(_),
+                close_plugin: true
+            }
+        )
     });
-    assert!(opened, "Should call open_file_in_place_of_plugin with line number");
+    assert!(
+        opened,
+        "Should call open_file_in_place_of_plugin with line number"
+    );
 }
 
 #[test]
@@ -552,8 +630,12 @@ fn test_fn_search_and_enter_opens_file_at_line() {
     test_zellij::mock_init_frame(80, 24);
 
     let mut plugin = State::default();
-    plugin.app_state.set_cwd(PathBuf::from("/home/user/project"));
-    plugin.app_state.update_rust_assets(fixtures::function_search_rust_assets());
+    plugin
+        .app_state
+        .set_cwd(PathBuf::from("/home/user/project"));
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::function_search_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -568,18 +650,25 @@ fn test_fn_search_and_enter_opens_file_at_line() {
 
     // Verify we have results and they're rust assets
     let results = plugin.search_state.get_current_display_results();
-    assert!(!results.is_empty(), "Should have search results for 'fn render'");
+    assert!(
+        !results.is_empty(),
+        "Should have search results for 'fn render'"
+    );
 
     // All results should only be functions (not structs)
     for result in &results {
         assert!(result.is_rust_asset(), "All results should be rust assets");
         if let crate::search::SearchItem::RustAsset(asset) = &result.item {
-            assert!(matches!(asset.type_kind, TypeKind::Function), "Should only show functions");
+            assert!(
+                matches!(asset.type_kind, TypeKind::Function),
+                "Should only show functions"
+            );
         }
     }
 
     // Should fuzzy match render-related functions
-    let result_names: Vec<String> = results.iter()
+    let result_names: Vec<String> = results
+        .iter()
         .filter_map(|r| {
             if let crate::search::SearchItem::RustAsset(asset) = &r.item {
                 Some(asset.name.clone())
@@ -588,10 +677,22 @@ fn test_fn_search_and_enter_opens_file_at_line() {
             }
         })
         .collect();
-    assert!(result_names.contains(&"render".to_string()), "Should find render");
-    assert!(result_names.contains(&"render_ui".to_string()), "Should find render_ui");
-    assert!(result_names.contains(&"render_table".to_string()), "Should find render_table");
-    assert!(result_names.contains(&"render_text".to_string()), "Should find render_text");
+    assert!(
+        result_names.contains(&"render".to_string()),
+        "Should find render"
+    );
+    assert!(
+        result_names.contains(&"render_ui".to_string()),
+        "Should find render_ui"
+    );
+    assert!(
+        result_names.contains(&"render_table".to_string()),
+        "Should find render_table"
+    );
+    assert!(
+        result_names.contains(&"render_text".to_string()),
+        "Should find render_text"
+    );
 
     // Render and verify output
     plugin.render(24, 80);
@@ -608,13 +709,19 @@ fn test_fn_search_and_enter_opens_file_at_line() {
     // Verify that open_file_in_place_of_plugin was called with line number
     let calls = test_zellij::mock_get_calls();
     let opened = calls.iter().any(|c| {
-        matches!(c, test_zellij::ZellijCall::OpenFileInPlaceOfPlugin {
-            path: _,
-            line_number: Some(_),
-            close_plugin: true
-        })
+        matches!(
+            c,
+            test_zellij::ZellijCall::OpenFileInPlaceOfPlugin {
+                path: _,
+                line_number: Some(_),
+                close_plugin: true
+            }
+        )
     });
-    assert!(opened, "Should call open_file_in_place_of_plugin with line number");
+    assert!(
+        opened,
+        "Should call open_file_in_place_of_plugin with line number"
+    );
 }
 
 #[test]
@@ -628,7 +735,9 @@ fn test_ctrl_f_calls_filepicker() {
     });
 
     let mut plugin = State::default();
-    plugin.app_state.set_cwd(PathBuf::from("/home/user/project"));
+    plugin
+        .app_state
+        .set_cwd(PathBuf::from("/home/user/project"));
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
 
@@ -648,7 +757,10 @@ fn test_ctrl_f_calls_filepicker() {
             args
         } if plugin_url == "filepicker" && args.contains_key("request_id"))
     });
-    assert!(called_filepicker, "Should call pipe_message_to_plugin with filepicker");
+    assert!(
+        called_filepicker,
+        "Should call pipe_message_to_plugin with filepicker"
+    );
 
     // Verify request_id was stored
     assert!(!plugin.request_ids.is_empty(), "Should store request_id");
@@ -666,13 +778,17 @@ fn test_receiving_pipe_from_filepicker_changes_folder() {
     test_zellij::mock_init_frame(80, 24);
 
     let mut plugin = State::default();
-    plugin.app_state.set_cwd(PathBuf::from("/home/user/project"));
+    plugin
+        .app_state
+        .set_cwd(PathBuf::from("/home/user/project"));
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
 
     // Clear initial_cwd by triggering the first HostFolderChanged event
     // This simulates the normal initialization flow
-    plugin.update(Event::HostFolderChanged(PathBuf::from("/home/user/project")));
+    plugin.update(Event::HostFolderChanged(PathBuf::from(
+        "/home/user/project",
+    )));
 
     // Disable git repo search since we're testing folder change behavior
     plugin.searching_for_git_repo = false;
@@ -711,20 +827,32 @@ fn test_receiving_pipe_from_filepicker_changes_folder() {
             path
         } if path == &PathBuf::from("/new/folder/path"))
     });
-    assert!(changed_folder, "Should call change_host_folder with new path");
+    assert!(
+        changed_folder,
+        "Should call change_host_folder with new path"
+    );
 
     // Verify request_id was removed
-    assert!(plugin.request_ids.is_empty(), "Should remove request_id after processing");
+    assert!(
+        plugin.request_ids.is_empty(),
+        "Should remove request_id after processing"
+    );
 
     // Verify user_selected_directory flag was set
-    assert!(plugin.app_state.is_user_selected_directory(), "Should mark as user selected directory");
+    assert!(
+        plugin.app_state.is_user_selected_directory(),
+        "Should mark as user selected directory"
+    );
 
     // Simulate the HostFolderChanged event that would be triggered by Zellij
     plugin.update(Event::HostFolderChanged(PathBuf::from("/new/folder/path")));
 
     // Verify the folder was updated in app state
-    assert_eq!(plugin.app_state.get_cwd(), &PathBuf::from("/new/folder/path"),
-        "App state should reflect new folder");
+    assert_eq!(
+        plugin.app_state.get_cwd(),
+        &PathBuf::from("/new/folder/path"),
+        "App state should reflect new folder"
+    );
 
     // Render and verify the new folder is displayed
     test_zellij::mock_clear_frame();
@@ -734,8 +862,10 @@ fn test_receiving_pipe_from_filepicker_changes_folder() {
     // Verify the frame contains the new folder path
     let frame = test_zellij::mock_get_frame().expect("Frame should be initialized");
     let frame_str = frame.to_string();
-    assert!(frame_str.contains("/new/folder/path"),
-        "Rendered output should display the new folder path");
+    assert!(
+        frame_str.contains("/new/folder/path"),
+        "Rendered output should display the new folder path"
+    );
 }
 
 #[test]
@@ -749,7 +879,9 @@ fn test_struct_keyword_filters_only_structs() {
     });
 
     let mut plugin = State::default();
-    plugin.app_state.update_rust_assets(fixtures::sample_rust_assets());
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::sample_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -764,14 +896,20 @@ fn test_struct_keyword_filters_only_structs() {
 
     // Verify we have results and they're all structs
     let results = plugin.search_state.get_current_display_results();
-    assert!(!results.is_empty(), "Should have search results for 'struct '");
+    assert!(
+        !results.is_empty(),
+        "Should have search results for 'struct '"
+    );
 
     // All results should be structs
     for result in results {
         assert!(result.is_rust_asset(), "All results should be rust assets");
         if let crate::search::SearchItem::RustAsset(asset) = &result.item {
-            assert!(matches!(asset.type_kind, crate::files::TypeKind::Struct),
-                "All results should be structs, found: {:?}", asset.type_kind);
+            assert!(
+                matches!(asset.type_kind, crate::files::TypeKind::Struct),
+                "All results should be structs, found: {:?}",
+                asset.type_kind
+            );
         }
     }
 }
@@ -790,7 +928,9 @@ fn test_search_rendering_shows_correct_results() {
     let mut plugin = State::default();
     plugin.app_state.update_panes(fixtures::sample_panes());
     plugin.app_state.update_files(fixtures::sample_files());
-    plugin.app_state.update_rust_assets(fixtures::sample_rust_assets());
+    plugin
+        .app_state
+        .update_rust_assets(fixtures::sample_rust_assets());
 
     plugin.load(BTreeMap::new());
     plugin.update(Event::PermissionRequestResult(PermissionStatus::Granted));
@@ -811,8 +951,10 @@ fn test_search_rendering_shows_correct_results() {
     let frame_str = frame.to_string();
 
     // Should contain "ui" somewhere in the search results
-    assert!(frame_str.contains("ui") || frame_str.contains("UI"),
-        "Rendered output should contain search results for 'ui'");
+    assert!(
+        frame_str.contains("ui") || frame_str.contains("UI"),
+        "Rendered output should contain search results for 'ui'"
+    );
 
     test_zellij::assert_frame_snapshot("search_results_ui");
 }

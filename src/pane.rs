@@ -1,7 +1,7 @@
-#[cfg(not(test))]
-use zellij_tile::prelude::*;
 #[cfg(test)]
 use crate::unit::test_zellij::prelude::*;
+#[cfg(not(test))]
+use zellij_tile::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct PaneMetadata {

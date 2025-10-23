@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use std::collections::BTreeMap;
-use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
+use crate::pane::PaneMetadata;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 #[derive(Default)]
 pub struct AppState {

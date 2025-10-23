@@ -1,8 +1,8 @@
+use memchr::memchr;
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
-use memchr::memchr;
 
 #[derive(Debug, Clone)]
 pub struct TypeDefinition {
@@ -19,43 +19,45 @@ pub enum TypeKind {
     Function,
 }
 
-pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTreeMap<PathBuf, Vec<TypeDefinition>>> {
+pub fn get_all_files<P: AsRef<std::path::Path>>(
+    dir: P,
+) -> std::io::Result<BTreeMap<PathBuf, Vec<TypeDefinition>>> {
     let mut files = Vec::with_capacity(1000);
     let mut queue = VecDeque::new();
     queue.push_back(dir.as_ref().to_path_buf());
-    
+
     while let Some(current_dir) = queue.pop_front() {
         if files.len() >= 1000 {
             break;
         }
-        
+
         let entries = match fs::read_dir(&current_dir) {
             Ok(entries) => entries,
             Err(_) => continue,
         };
-        
+
         let mut dirs_in_level = Vec::new();
-        
+
         for entry in entries {
             if files.len() >= 1000 {
                 break;
             }
-            
+
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(_) => continue,
             };
-            
+
             let path = entry.path();
             let file_name = match path.file_name().and_then(|n| n.to_str()) {
                 Some(name) => name,
                 None => continue,
             };
-            
+
             if should_ignore(file_name) {
                 continue;
             }
-            
+
             if path.is_file() {
                 let clean_path = if let Some(path_str) = path.to_str() {
                     if path_str.starts_with("/host/") {
@@ -71,35 +73,38 @@ pub fn get_all_files<P: AsRef<std::path::Path>>(dir: P) -> std::io::Result<BTree
                 dirs_in_level.push(path);
             }
         }
-        
+
         for dir in dirs_in_level {
             queue.push_back(dir);
         }
     }
-    
+
     let mut result = BTreeMap::new();
-    
-    let rust_files: Vec<_> = files.iter()
+
+    let rust_files: Vec<_> = files
+        .iter()
         .filter(|file_path| file_path.extension().and_then(|ext| ext.to_str()) == Some("rs"))
         .collect();
-    
+
     for file_path in &rust_files {
         let rc_path = Rc::new((*file_path).clone());
         let definitions = scan_rust_file_fast(&rc_path).unwrap_or_default();
         result.insert((*file_path).clone(), definitions);
     }
-    
+
     // Add non-Rust files with empty definitions
     for file_path in files {
         if !result.contains_key(&file_path) {
             result.insert(file_path, Vec::new());
         }
     }
-    
+
     Ok(result)
 }
 
-pub fn scan_rust_file_fast(file_path: &Rc<PathBuf>) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
+pub fn scan_rust_file_fast(
+    file_path: &Rc<PathBuf>,
+) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
     // Read file content as bytes first to avoid UTF-8 validation overhead
     let bytes = match fs::read(PathBuf::from("/host").join(file_path.as_ref())) {
         Ok(bytes) => bytes,
@@ -115,7 +120,10 @@ pub fn scan_rust_file_fast(file_path: &Rc<PathBuf>) -> Result<Vec<TypeDefinition
     scan_with_bytes(&bytes, Rc::clone(file_path))
 }
 
-fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
+fn scan_with_bytes(
+    bytes: &[u8],
+    file_path: Rc<PathBuf>,
+) -> Result<Vec<TypeDefinition>, Box<dyn std::error::Error>> {
     let mut definitions = Vec::with_capacity(64);
     let mut line_num = 1;
     let mut pos = 0;
@@ -134,7 +142,8 @@ fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefin
             if let Some(start) = first_non_ws {
                 let trimmed = &line[start..];
                 if !trimmed.starts_with(b"//") && !trimmed.starts_with(b"/*") {
-                    if let Some(def) = extract_definition(trimmed, Rc::clone(&file_path), line_num) {
+                    if let Some(def) = extract_definition(trimmed, Rc::clone(&file_path), line_num)
+                    {
                         definitions.push(def);
 
                         // Early exit if we have many definitions
@@ -154,7 +163,11 @@ fn scan_with_bytes(bytes: &[u8], file_path: Rc<PathBuf>) -> Result<Vec<TypeDefin
 }
 
 // Note: line is already trimmed (leading whitespace removed)
-fn extract_definition(line: &[u8], file_path: Rc<PathBuf>, line_num: usize) -> Option<TypeDefinition> {
+fn extract_definition(
+    line: &[u8],
+    file_path: Rc<PathBuf>,
+    line_num: usize,
+) -> Option<TypeDefinition> {
     let mut i = 0;
 
     // Skip "pub" or "pub(...)"
@@ -178,22 +191,22 @@ fn extract_definition(line: &[u8], file_path: Rc<PathBuf>, line_num: usize) -> O
     }
 
     // Check for keywords
-    if line.len() >= i + 7 && &line[i..i+6] == b"struct" && line[i+6] == b' ' {
-        extract_identifier(&line[i+7..]).map(|name| TypeDefinition {
+    if line.len() >= i + 7 && &line[i..i + 6] == b"struct" && line[i + 6] == b' ' {
+        extract_identifier(&line[i + 7..]).map(|name| TypeDefinition {
             type_kind: TypeKind::Struct,
             name,
             file_path,
             line_number: line_num,
         })
-    } else if line.len() >= i + 5 && &line[i..i+4] == b"enum" && line[i+4] == b' ' {
-        extract_identifier(&line[i+5..]).map(|name| TypeDefinition {
+    } else if line.len() >= i + 5 && &line[i..i + 4] == b"enum" && line[i + 4] == b' ' {
+        extract_identifier(&line[i + 5..]).map(|name| TypeDefinition {
             type_kind: TypeKind::Enum,
             name,
             file_path,
             line_number: line_num,
         })
-    } else if line.len() >= i + 3 && &line[i..i+2] == b"fn" && line[i+2] == b' ' {
-        extract_identifier(&line[i+3..]).map(|name| TypeDefinition {
+    } else if line.len() >= i + 3 && &line[i..i + 2] == b"fn" && line[i + 2] == b' ' {
+        extract_identifier(&line[i + 3..]).map(|name| TypeDefinition {
             type_kind: TypeKind::Function,
             name,
             file_path,
@@ -212,9 +225,19 @@ fn extract_identifier(bytes: &[u8]) -> Option<String> {
     }
 
     // Find end of identifier (until <, {, (, ;, or whitespace)
-    let end = bytes.iter().position(|&b| {
-        b == b'<' || b == b'{' || b == b'(' || b == b';' || b == b' ' || b == b'\t' || b == b'\n' || b == b'\r'
-    }).unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .position(|&b| {
+            b == b'<'
+                || b == b'{'
+                || b == b'('
+                || b == b';'
+                || b == b' '
+                || b == b'\t'
+                || b == b'\n'
+                || b == b'\r'
+        })
+        .unwrap_or(bytes.len());
 
     if end == 0 {
         return None;

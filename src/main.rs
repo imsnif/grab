@@ -1,7 +1,7 @@
-#[cfg(not(test))]
-use zellij_tile::prelude::*;
 #[cfg(test)]
 use crate::unit::test_zellij::prelude::*;
+#[cfg(not(test))]
+use zellij_tile::prelude::*;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -11,22 +11,22 @@ use uuid::Uuid;
 mod unit;
 
 mod app_state;
-mod ui_state;
-mod search_state;
-mod search;
-mod ui;
-mod pane;
 mod files;
+mod pane;
+mod search;
+mod search_state;
+mod ui;
+mod ui_state;
 
 register_plugin!(State);
 
 use crate::app_state::AppState;
-use crate::ui_state::UIState;
-use crate::search_state::SearchState;
-use crate::search::{SearchEngine, SearchItem};
-use crate::ui::UIRenderer;
-use crate::pane::extract_editor_pane_metadata;
 use crate::files::get_all_files;
+use crate::pane::extract_editor_pane_metadata;
+use crate::search::{SearchEngine, SearchItem};
+use crate::search_state::SearchState;
+use crate::ui::UIRenderer;
+use crate::ui_state::UIState;
 
 fn is_current_directory_git_repository() -> bool {
     // Check if the current host folder has a .git directory or file
@@ -36,9 +36,9 @@ fn is_current_directory_git_repository() -> bool {
 
 #[derive(Debug, Clone)]
 pub enum RustAssetSearchMode {
-    Struct(String),    // Search term after "struct"
-    Enum(String),      // Search term after "enum"
-    Function(String),  // Search term after "fn"
+    Struct(String),   // Search term after "struct"
+    Enum(String),     // Search term after "enum"
+    Function(String), // Search term after "fn"
 }
 
 fn parse_rust_asset_search(search_term: &str) -> Option<RustAssetSearchMode> {
@@ -112,7 +112,7 @@ impl ZellijPlugin for State {
             Event::PermissionRequestResult(_) => {
                 let own_plugin_id = get_plugin_ids().plugin_id;
                 rename_plugin_pane(own_plugin_id, "Grab...");
-                
+
                 self.searching_for_git_repo = true;
                 self.start_git_repository_search();
             }
@@ -175,7 +175,10 @@ impl ZellijPlugin for State {
                     let mut args = BTreeMap::new();
                     self.request_ids.push(request_id.to_string());
                     config.insert("request_id".to_owned(), request_id.to_string());
-                    config.insert("caller_cwd".to_owned(), self.app_state.get_cwd().display().to_string());
+                    config.insert(
+                        "caller_cwd".to_owned(),
+                        self.app_state.get_cwd().display().to_string(),
+                    );
                     args.insert("request_id".to_owned(), request_id.to_string());
                     pipe_message_to_plugin(
                         MessageToPlugin::new("filepicker")
@@ -184,11 +187,13 @@ impl ZellijPlugin for State {
                             .new_plugin_instance_should_have_pane_title(
                                 "Select new base folder for the picker...",
                             )
-                            .new_plugin_instance_should_replace_pane(PaneId::Plugin(get_plugin_ids().plugin_id))
+                            .new_plugin_instance_should_replace_pane(PaneId::Plugin(
+                                get_plugin_ids().plugin_id,
+                            ))
                             .with_args(args),
                     );
                     should_render = true;
-                },
+                }
                 _ => {}
             },
             _ => {}
@@ -207,11 +212,11 @@ impl ZellijPlugin for State {
                             // Mark that this is a user-selected directory, so scanning should proceed
                             self.app_state.set_user_selected_directory(true);
                             change_host_folder(new_folder);
-                        },
-                        None => {},
+                        }
+                        None => {}
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
             true
         } else {
@@ -227,12 +232,12 @@ impl ZellijPlugin for State {
         let available_rows = rows.saturating_sub(8);
         let visible_items = available_rows.min(table_count);
 
-        self.ui_state.adjust_scroll_for_selection(visible_items, table_count);
+        self.ui_state
+            .adjust_scroll_for_selection(visible_items, table_count);
 
-        let (displayed_files, remaining_files) = self.search_engine.get_displayed_files(
-            self.search_state.get_term(),
-            self.app_state.get_files(),
-        );
+        let (displayed_files, remaining_files) = self
+            .search_engine
+            .get_displayed_files(self.search_state.get_term(), self.app_state.get_files());
 
         self.ui_renderer.render_plugin(
             rows,
@@ -273,7 +278,7 @@ impl State {
 
     fn move_selection_down(&mut self) {
         let table_count = self.search_state.get_current_display_count();
-        
+
         if table_count > 0 {
             self.ui_state.move_selection_down(table_count);
         }
@@ -281,7 +286,7 @@ impl State {
 
     fn move_selection_up(&mut self) {
         let table_count = self.search_state.get_current_display_count();
-        
+
         if table_count > 0 {
             self.ui_state.move_selection_up(table_count);
         }
@@ -301,7 +306,7 @@ impl State {
             SearchItem::Pane(pane) => {
                 let own_plugin_id = get_plugin_ids().plugin_id;
                 replace_pane_with_existing_pane(PaneId::Plugin(own_plugin_id), pane.id);
-            },
+            }
             SearchItem::File(file) => {
                 let should_close_plugin = true;
                 open_file_in_place_of_plugin(
@@ -309,17 +314,14 @@ impl State {
                     should_close_plugin,
                     Default::default(),
                 );
-            },
+            }
             SearchItem::RustAsset(rust_asset) => {
                 let should_close_plugin = true;
-                let mut file_to_open = FileToOpen::new(self.app_state.get_cwd().join(rust_asset.file_path.as_ref()));
+                let mut file_to_open =
+                    FileToOpen::new(self.app_state.get_cwd().join(rust_asset.file_path.as_ref()));
                 file_to_open.line_number = Some(rust_asset.line_number);
-                open_file_in_place_of_plugin(
-                    file_to_open,
-                    should_close_plugin,
-                    Default::default(),
-                );
-            },
+                open_file_in_place_of_plugin(file_to_open, should_close_plugin, Default::default());
+            }
         }
     }
 
@@ -333,14 +335,18 @@ impl State {
         self.update_host_folder_with_scan_control(new_host_folder, false);
     }
 
-    fn update_host_folder_with_scan_control(&mut self, new_host_folder: Option<PathBuf>, user_selected: bool) {
+    fn update_host_folder_with_scan_control(
+        &mut self,
+        new_host_folder: Option<PathBuf>,
+        user_selected: bool,
+    ) {
         let new_host_folder = new_host_folder.unwrap_or_else(|| get_plugin_ids().initial_cwd);
         self.app_state.set_cwd(new_host_folder);
-        
+
         // Only scan if conditions are met
-        let should_scan = self.app_state.get_files().is_empty() && 
-                         (is_current_directory_git_repository() || user_selected);
-        
+        let should_scan = self.app_state.get_files().is_empty()
+            && (is_current_directory_git_repository() || user_selected);
+
         if should_scan {
             if let Ok(files_and_rust_assets) = get_all_files("/host") {
                 let files: Vec<PathBuf> = files_and_rust_assets.keys().cloned().collect();
@@ -382,7 +388,10 @@ impl State {
         let mut args = BTreeMap::new();
         self.request_ids.push(request_id.to_string());
         config.insert("request_id".to_owned(), request_id.to_string());
-        config.insert("caller_cwd".to_owned(), self.app_state.get_cwd().display().to_string());
+        config.insert(
+            "caller_cwd".to_owned(),
+            self.app_state.get_cwd().display().to_string(),
+        );
         args.insert("request_id".to_owned(), request_id.to_string());
         pipe_message_to_plugin(
             MessageToPlugin::new("filepicker")
@@ -396,4 +405,3 @@ impl State {
         );
     }
 }
-

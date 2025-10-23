@@ -1,12 +1,12 @@
 // Test fixtures for mock data
 #![cfg(test)]
 
+use super::test_zellij::PaneId;
+use crate::files::{TypeDefinition, TypeKind};
+use crate::pane::PaneMetadata;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::pane::PaneMetadata;
-use crate::files::{TypeDefinition, TypeKind};
-use super::test_zellij::PaneId;
 
 /// Create sample panes for testing
 pub fn sample_panes() -> Vec<PaneMetadata> {
@@ -63,14 +63,12 @@ pub fn sample_rust_assets() -> BTreeMap<PathBuf, Vec<TypeDefinition>> {
     );
     rust_assets.insert(
         (*ui_rs).clone(),
-        vec![
-            TypeDefinition {
-                type_kind: TypeKind::Struct,
-                name: "UIRenderer".to_string(),
-                file_path: Rc::clone(&ui_rs),
-                line_number: 10,
-            },
-        ],
+        vec![TypeDefinition {
+            type_kind: TypeKind::Struct,
+            name: "UIRenderer".to_string(),
+            file_path: Rc::clone(&ui_rs),
+            line_number: 10,
+        }],
     );
 
     rust_assets
@@ -119,14 +117,12 @@ pub fn struct_search_rust_assets() -> BTreeMap<PathBuf, Vec<TypeDefinition>> {
     );
     rust_assets.insert(
         (*state_rs).clone(),
-        vec![
-            TypeDefinition {
-                type_kind: TypeKind::Struct,
-                name: "AppState".to_string(),
-                file_path: Rc::clone(&state_rs),
-                line_number: 8,
-            },
-        ],
+        vec![TypeDefinition {
+            type_kind: TypeKind::Struct,
+            name: "AppState".to_string(),
+            file_path: Rc::clone(&state_rs),
+            line_number: 8,
+        }],
     );
 
     rust_assets
@@ -164,25 +160,21 @@ pub fn enum_search_rust_assets() -> BTreeMap<PathBuf, Vec<TypeDefinition>> {
     );
     rust_assets.insert(
         (*search_rs).clone(),
-        vec![
-            TypeDefinition {
-                type_kind: TypeKind::Enum,
-                name: "SearchItem".to_string(),
-                file_path: Rc::clone(&search_rs),
-                line_number: 17,
-            },
-        ],
+        vec![TypeDefinition {
+            type_kind: TypeKind::Enum,
+            name: "SearchItem".to_string(),
+            file_path: Rc::clone(&search_rs),
+            line_number: 17,
+        }],
     );
     rust_assets.insert(
         (*events_rs).clone(),
-        vec![
-            TypeDefinition {
-                type_kind: TypeKind::Enum,
-                name: "EventType".to_string(),
-                file_path: Rc::clone(&events_rs),
-                line_number: 5,
-            },
-        ],
+        vec![TypeDefinition {
+            type_kind: TypeKind::Enum,
+            name: "EventType".to_string(),
+            file_path: Rc::clone(&events_rs),
+            line_number: 5,
+        }],
     );
 
     rust_assets
@@ -237,14 +229,12 @@ pub fn function_search_rust_assets() -> BTreeMap<PathBuf, Vec<TypeDefinition>> {
     );
     rust_assets.insert(
         (*search_rs).clone(),
-        vec![
-            TypeDefinition {
-                type_kind: TypeKind::Function,
-                name: "search".to_string(),
-                file_path: Rc::clone(&search_rs),
-                line_number: 42,
-            },
-        ],
+        vec![TypeDefinition {
+            type_kind: TypeKind::Function,
+            name: "search".to_string(),
+            file_path: Rc::clone(&search_rs),
+            line_number: 42,
+        }],
     );
 
     rust_assets

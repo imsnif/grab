@@ -1,6 +1,6 @@
-use crate::search::{SearchResult, SearchResults, SearchItem};
-use crate::{RustAssetSearchMode, parse_rust_asset_search};
 use crate::files::TypeKind;
+use crate::search::{SearchItem, SearchResult, SearchResults};
+use crate::{parse_rust_asset_search, RustAssetSearchMode};
 
 #[derive(Default)]
 pub struct SearchState {
@@ -72,9 +72,15 @@ impl SearchState {
                 .filter(|result| {
                     if let SearchItem::RustAsset(rust_asset) = &result.item {
                         match &mode {
-                            RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, TypeKind::Struct),
-                            RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, TypeKind::Enum),
-                            RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, TypeKind::Function),
+                            RustAssetSearchMode::Struct(_) => {
+                                matches!(rust_asset.type_kind, TypeKind::Struct)
+                            }
+                            RustAssetSearchMode::Enum(_) => {
+                                matches!(rust_asset.type_kind, TypeKind::Enum)
+                            }
+                            RustAssetSearchMode::Function(_) => {
+                                matches!(rust_asset.type_kind, TypeKind::Function)
+                            }
                         }
                     } else {
                         false

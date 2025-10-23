@@ -1,13 +1,13 @@
-#[cfg(not(test))]
-use zellij_tile::prelude::*;
 #[cfg(test)]
 use crate::unit::test_zellij::prelude::*;
+#[cfg(not(test))]
+use zellij_tile::prelude::*;
 
-use std::path::PathBuf;
-use crate::search::{SearchResult, SearchItem};
-use crate::pane::PaneMetadata;
-use crate::{RustAssetSearchMode, parse_rust_asset_search};
 use crate::files::TypeKind;
+use crate::pane::PaneMetadata;
+use crate::search::{SearchItem, SearchResult};
+use crate::{parse_rust_asset_search, RustAssetSearchMode};
+use std::path::PathBuf;
 
 #[derive(Default)]
 pub struct UIRenderer;
@@ -37,10 +37,10 @@ impl UIRenderer {
         let cwd_display = format!("Current Folder: {} (Ctrl f to change)", cwd.display());
         let max_cwd_width = cols.saturating_sub(4);
         let truncated_cwd = truncate_middle(&cwd_display, max_cwd_width);
-        
+
         let folder_prefix = "Current Folder: ";
         let ctrl_suffix = "Ctrl f";
-        
+
         let mut cwd_text = Text::new(&truncated_cwd);
         cwd_text = cwd_text.color_substring(2, folder_prefix);
         cwd_text = cwd_text.color_substring(3, ctrl_suffix);
@@ -69,7 +69,8 @@ impl UIRenderer {
         );
 
         let hint_y = rows.saturating_sub(1);
-        let hint_text = "Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets";
+        let hint_text =
+            "Hint: start your search with 'struct', 'fn' or 'enum' to look for rust assets";
         let max_hint_width = cols.saturating_sub(2);
         let truncated_hint = truncate_middle(hint_text, max_hint_width);
         let hint_display = Text::new(&truncated_hint).color_substring(3, "Hint:");
@@ -91,16 +92,24 @@ impl UIRenderer {
         _current_cwd: &PathBuf,
     ) {
         // Check if we're in Rust asset search mode
-        let filtered_results: Vec<SearchResult> = if let Some(rust_mode) = parse_rust_asset_search(search_term) {
+        let filtered_results: Vec<SearchResult> = if let Some(rust_mode) =
+            parse_rust_asset_search(search_term)
+        {
             // Show only matching Rust assets
             files_panes_results
                 .iter()
                 .filter(|result| {
                     if let SearchItem::RustAsset(rust_asset) = &result.item {
                         match &rust_mode {
-                            RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, TypeKind::Struct),
-                            RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, TypeKind::Enum),
-                            RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, TypeKind::Function),
+                            RustAssetSearchMode::Struct(_) => {
+                                matches!(rust_asset.type_kind, TypeKind::Struct)
+                            }
+                            RustAssetSearchMode::Enum(_) => {
+                                matches!(rust_asset.type_kind, TypeKind::Enum)
+                            }
+                            RustAssetSearchMode::Function(_) => {
+                                matches!(rust_asset.type_kind, TypeKind::Function)
+                            }
                         }
                     } else {
                         false
@@ -126,7 +135,8 @@ impl UIRenderer {
 
         let scroll_indication_space = 10;
         let type_column_width = 7;
-        let available_title_width = cols.saturating_sub(scroll_indication_space + type_column_width);
+        let available_title_width =
+            cols.saturating_sub(scroll_indication_space + type_column_width);
 
         self.render_table(
             start_y,
@@ -188,9 +198,11 @@ impl UIRenderer {
         } else {
             0
         };
-        
+
         let global_end = if scroll_offset + visible_rows > table_start_index {
-            (scroll_offset + visible_rows).saturating_sub(table_start_index).min(results.len())
+            (scroll_offset + visible_rows)
+                .saturating_sub(table_start_index)
+                .min(results.len())
         } else {
             0
         };
@@ -207,11 +219,11 @@ impl UIRenderer {
                     SearchItem::Pane(_) => {
                         let display_text = search_result.display_text();
                         (display_text, Some(&search_result.indices), "PANE")
-                    },
+                    }
                     SearchItem::File(_) => {
                         let display_text = search_result.display_text();
                         (display_text, Some(&search_result.indices), "FILE")
-                    },
+                    }
                     SearchItem::RustAsset(rust_asset) => {
                         let display_text = search_result.display_text();
                         let item_type = match rust_asset.type_kind {
@@ -220,7 +232,7 @@ impl UIRenderer {
                             TypeKind::Function => "FN",
                         };
                         (display_text, Some(&search_result.indices), item_type)
-                    },
+                    }
                 };
 
                 let truncated_title = truncate_middle(&display_text, available_title_width);
@@ -260,8 +272,9 @@ impl UIRenderer {
                 let third_column = if item_index == global_start && scroll_offset > 0 {
                     let indicator_text = format!("↑ {} more", scroll_offset);
                     Text::new(&indicator_text).color_all(1)
-                } else if item_index == global_start + actual_visible.saturating_sub(1) && 
-                         scroll_offset + visible_rows < total_items {
+                } else if item_index == global_start + actual_visible.saturating_sub(1)
+                    && scroll_offset + visible_rows < total_items
+                {
                     let remaining = total_items.saturating_sub(scroll_offset + visible_rows);
                     let indicator_text = format!("↓ {} more", remaining);
                     Text::new(&indicator_text).color_all(1)
@@ -277,7 +290,6 @@ impl UIRenderer {
 
         print_table_with_coordinates(table, base_x, table_y, None, None);
     }
-
 }
 
 pub fn truncate_middle(text: &str, max_width: usize) -> String {

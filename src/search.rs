@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use crate::pane::PaneMetadata;
 use crate::files::TypeDefinition;
-use crate::{RustAssetSearchMode, parse_rust_asset_search};
+use crate::pane::PaneMetadata;
+use crate::{parse_rust_asset_search, RustAssetSearchMode};
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
@@ -53,7 +53,11 @@ impl SearchResult {
             SearchItem::Pane(pane) => pane.title.clone(),
             SearchItem::File(path) => path.to_string_lossy().to_string(),
             SearchItem::RustAsset(rust_asset) => {
-                format!("{} ({})", rust_asset.name, rust_asset.file_path.to_string_lossy())
+                format!(
+                    "{} ({})",
+                    rust_asset.name,
+                    rust_asset.file_path.to_string_lossy()
+                )
             }
         }
     }
@@ -72,7 +76,6 @@ impl SearchResult {
     pub fn is_rust_asset(&self) -> bool {
         matches!(self.item, SearchItem::RustAsset(_))
     }
-
 }
 
 pub struct SearchEngine {
@@ -123,10 +126,12 @@ impl SearchEngine {
                 RustAssetSearchMode::Enum(term) => term,
                 RustAssetSearchMode::Function(term) => term,
             };
-            results.files_panes_results = self.search_rust_assets_only(actual_search_term, rust_assets, &rust_mode);
+            results.files_panes_results =
+                self.search_rust_assets_only(actual_search_term, rust_assets, &rust_mode);
         } else {
             // Normal search: files, panes, and rust assets
-            results.files_panes_results = self.search_files_panes_rust(search_term, panes, files, rust_assets);
+            results.files_panes_results =
+                self.search_files_panes_rust(search_term, panes, files, rust_assets);
         }
 
         results
@@ -147,7 +152,11 @@ impl SearchEngine {
 
         // Add all rust assets
         for rust_asset in rust_assets {
-            results.push(SearchResult::new_rust_asset(rust_asset.clone(), 500, vec![]));
+            results.push(SearchResult::new_rust_asset(
+                rust_asset.clone(),
+                500,
+                vec![],
+            ));
         }
 
         // Add all files
@@ -157,7 +166,6 @@ impl SearchEngine {
 
         results
     }
-
 
     fn search_files_panes_rust(
         &self,
@@ -176,15 +184,21 @@ impl SearchEngine {
                 } else {
                     score
                 };
-                
+
                 matches.push(SearchResult::new_pane(pane.clone(), boosted_score, indices));
             }
         }
 
         // Search rust assets
         for rust_asset in rust_assets {
-            if let Some((score, indices)) = self.matcher.fuzzy_indices(&rust_asset.name, search_term) {
-                matches.push(SearchResult::new_rust_asset(rust_asset.clone(), score, indices));
+            if let Some((score, indices)) =
+                self.matcher.fuzzy_indices(&rust_asset.name, search_term)
+            {
+                matches.push(SearchResult::new_rust_asset(
+                    rust_asset.clone(),
+                    score,
+                    indices,
+                ));
             }
         }
 
@@ -213,18 +227,34 @@ impl SearchEngine {
         for rust_asset in rust_assets {
             // Filter by type first
             let type_matches = match mode {
-                RustAssetSearchMode::Struct(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Struct),
-                RustAssetSearchMode::Enum(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Enum),
-                RustAssetSearchMode::Function(_) => matches!(rust_asset.type_kind, crate::files::TypeKind::Function),
+                RustAssetSearchMode::Struct(_) => {
+                    matches!(rust_asset.type_kind, crate::files::TypeKind::Struct)
+                }
+                RustAssetSearchMode::Enum(_) => {
+                    matches!(rust_asset.type_kind, crate::files::TypeKind::Enum)
+                }
+                RustAssetSearchMode::Function(_) => {
+                    matches!(rust_asset.type_kind, crate::files::TypeKind::Function)
+                }
             };
 
             if type_matches {
                 if search_term.is_empty() {
                     // If no search term after the keyword, show all of that type
-                    matches.push(SearchResult::new_rust_asset(rust_asset.clone(), 1000, vec![]));
-                } else if let Some((score, indices)) = self.matcher.fuzzy_indices(&rust_asset.name, search_term) {
+                    matches.push(SearchResult::new_rust_asset(
+                        rust_asset.clone(),
+                        1000,
+                        vec![],
+                    ));
+                } else if let Some((score, indices)) =
+                    self.matcher.fuzzy_indices(&rust_asset.name, search_term)
+                {
                     // Fuzzy match against the rust asset name
-                    matches.push(SearchResult::new_rust_asset(rust_asset.clone(), score, indices));
+                    matches.push(SearchResult::new_rust_asset(
+                        rust_asset.clone(),
+                        score,
+                        indices,
+                    ));
                 }
             }
         }
@@ -233,8 +263,11 @@ impl SearchEngine {
         matches
     }
 
-
-    pub fn get_displayed_files(&self, search_term: &str, files: &[PathBuf]) -> (Vec<PathBuf>, usize) {
+    pub fn get_displayed_files(
+        &self,
+        search_term: &str,
+        files: &[PathBuf],
+    ) -> (Vec<PathBuf>, usize) {
         if search_term.is_empty() {
             return (vec![], 0);
         }
